@@ -1,42 +1,54 @@
 import pdfplumber
 import json
 import os
+import re
+
+patterns = []
+
+def register_pattern(pattern_name, pattern):
+    def decorator(func):
+        patterns.append((pattern_name, pattern, func))
+        return func
+    return decorator
+
+@register_pattern('example_pattern', r'your_regex_pattern_here')
+def example_handler(match, page_number):
+    return {
+        "page_number": page_number,
+        "pattern_name": 'example_pattern',
+        "match": match.group(1)
+    }
 
 def extract_pdf_to_json(pdf_path, output_folder):
-    # Get PDF file name (without extension)
     pdf_filename = os.path.basename(pdf_path)
     json_filename = os.path.splitext(pdf_filename)[0] + '.json'
     json_path = os.path.join(output_folder, json_filename)
 
-    # Open the PDF file
+    results = []
     with pdfplumber.open(pdf_path) as pdf:
-        content_list = []
         for i, page in enumerate(pdf.pages):
             page_text = page.extract_text()
-            page_content = {
-                "page_number": i + 1,
-                "content": page_text
-            }
-            content_list.append(page_content)
+            for pattern_name, pattern, handler in patterns:
+                for match in re.finditer(pattern, page_text):
+                    result = handler(match, i + 1)
+                    if result:
+                        results.append(result)
 
-    # Write content to JSON file
     with open(json_path, 'w', encoding='utf-8') as json_file:
-        json.dump(content_list, json_file, ensure_ascii=False, indent=4)
+        json.dump(results, json_file, ensure_ascii=False, indent=4)
 
     print(f"PDF content extracted to {json_path}")
 
 def process_pdf_folder(input_folder, output_folder):
-    # Create output folder if it does not exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Iterate over all files in the input folder
     for filename in os.listdir(input_folder):
         if filename.lower().endswith('.pdf'):
             pdf_path = os.path.join(input_folder, filename)
             extract_pdf_to_json(pdf_path, output_folder)
 
 # Example usage
-input_folder = 'path/to/pdf_folder'  # Replace with your PDF folder path
+input_folder = 'path/to/pdf_folder'
 output_folder = 'pdf_extractor_output'
 process_pdf_folder(input_folder, output_folder)
