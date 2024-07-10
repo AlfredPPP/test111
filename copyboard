@@ -2,18 +2,13 @@ import pdfplumber
 import json
 import os
 
-def extract_pdf_to_json(pdf_path):
-    # 创建输出文件夹（如果不存在）
-    output_folder = 'pdf_extractor_output'
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # 获取 PDF 文件名（不含扩展名）
+def extract_pdf_to_json(pdf_path, output_folder):
+    # Get PDF file name (without extension)
     pdf_filename = os.path.basename(pdf_path)
     json_filename = os.path.splitext(pdf_filename)[0] + '.json'
     json_path = os.path.join(output_folder, json_filename)
 
-    # 打开 PDF 文件
+    # Open the PDF file
     with pdfplumber.open(pdf_path) as pdf:
         content_list = []
         for i, page in enumerate(pdf.pages):
@@ -24,12 +19,24 @@ def extract_pdf_to_json(pdf_path):
             }
             content_list.append(page_content)
 
-    # 将内容写入 JSON 文件
+    # Write content to JSON file
     with open(json_path, 'w', encoding='utf-8') as json_file:
         json.dump(content_list, json_file, ensure_ascii=False, indent=4)
 
     print(f"PDF content extracted to {json_path}")
 
-# 使用示例
-pdf_path = 'example.pdf'  # 替换为你的PDF文件路径
-extract_pdf_to_json(pdf_path)
+def process_pdf_folder(input_folder, output_folder):
+    # Create output folder if it does not exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # Iterate over all files in the input folder
+    for filename in os.listdir(input_folder):
+        if filename.lower().endswith('.pdf'):
+            pdf_path = os.path.join(input_folder, filename)
+            extract_pdf_to_json(pdf_path, output_folder)
+
+# Example usage
+input_folder = 'path/to/pdf_folder'  # Replace with your PDF folder path
+output_folder = 'pdf_extractor_output'
+process_pdf_folder(input_folder, output_folder)
