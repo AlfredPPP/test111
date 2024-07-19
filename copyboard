@@ -1,68 +1,10 @@
-import asyncio
-import aiohttp
-import json
-from datetime import datetime
+import subprocess
+import pkg_resources
 
-class DataFeed:
-    def __init__(self):
-        self.final_import_body_collection = []  # Initialize with your data
-        self.import_status_collection = []
-        self.final_import_status_collection = {}
+# 获取所有已安装包的信息
+installed_packages = pkg_resources.working_set
+packages = [package.project_name for package in installed_packages]
 
-    async def thr_post_data_feed(self):
-        await self.post_all_data_feed()
-
-    async def post_all_data_feed(self):
-        max_d = len(self.final_import_body_collection)
-        semaphore = asyncio.Semaphore(max_d)
-        tasks = []
-
-        for body in self.final_import_body_collection:
-            # 创建任务并添加到任务列表中
-            task = asyncio.create_task(self.post_data_feed(json.loads(body), semaphore))
-            tasks.append(task)
-            # 每次创建任务后，等待1秒
-            await asyncio.sleep(1)
-
-        # 并发执行所有任务
-        self.import_status_collection = await asyncio.gather(*tasks, return_exceptions=False)
-        print(self.import_status_collection)
-
-        # 收集最终状态
-        self.final_import_status_collection = {}
-        for s in self.import_status_collection:
-            self.final_import_status_collection[list(json.loads(s).keys())[0]] = "InProgress"
-        print(self.final_import_status_collection)
-
-    async def post_data_feed(self, body, sem):
-        async with sem:
-            token = 'kajsdlkjaksldjalks'
-            headers = {"authorization": "Bearer " + token}
-            data = json.dumps(body)
-
-            import_name = body.get("importName")
-            import_status = {}
-
-            if body.get("env") == "0002":
-                url = 'https://api-uat.onesourcetax.com/trusts/v1/imports/'
-            else:
-                url = 'https://api-apac.onesourcetax.com/trusts/v1/imports/'
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, data=data) as res:
-                    content = await res.json()
-                    if len(content.get("importId", "")) > 0:
-                        import_status[import_name] = content.get("importId", "")
-
-            if not import_status:
-                await self.post_import_separate(body)
-            return json.dumps(import_status)
-
-    async def post_import_separate(self, body):
-        # Implement retry logic if necessary
-        pass
-
-if __name__ == "__main__":
-    data_feed = DataFeed()
-    asyncio.run(data_feed.thr_post_data_feed())
-    print(datetime.now())
+# 逐个升级每个包
+for package in packages:
+    subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', package])
