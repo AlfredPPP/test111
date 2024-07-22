@@ -1,122 +1,16 @@
-当然可以。下面是一个能体现出 Vue.js 特点的简单示例，包含动态数据绑定和事件处理。
+import win32com.client
 
-### 文件结构
+def get_excel_last_saved_date(file_path):
+    excel = win32com.client.Dispatch("Excel.Application")
+    workbook = excel.Workbooks.Open(file_path)
 
-```
-flask-vue-app/
-│
-├── venv/                     # 虚拟环境目录
-│
-├── app/
-│   ├── static/
-│   │   ├── index.html        # Vue.js 应用的 HTML 文件
-│   │   └── js/
-│   │       └── app.js        # Vue.js 应用的 JavaScript 文件
-│   │
-│   └── app.py                # Flask 应用
-│
-└── requirements.txt          # 依赖文件
-```
+    last_saved_date = workbook.BuiltinDocumentProperties("Last Save Time")
+    
+    workbook.Close(SaveChanges=False)
+    excel.Quit()
 
-### 具体内容
+    return last_saved_date
 
-#### 1. 创建文件结构
-
-首先，在终端（或命令行）中创建目录和文件结构：
-
-```bash
-mkdir flask-vue-app
-cd flask-vue-app
-mkdir -p app/static/js
-```
-
-#### 2. 设置虚拟环境并安装Flask
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows 用户使用 `venv\Scripts\activate`
-pip install Flask
-```
-
-#### 3. 创建 `requirements.txt`
-
-创建一个 `requirements.txt` 文件，内容如下：
-
-```
-Flask
-```
-
-#### 4. 创建 `index.html`
-
-在 `app/static` 目录下创建 `index.html` 文件，内容如下：
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vue.js App</title>
-</head>
-<body>
-  <div id="app">
-    <h1>{{ message }}</h1>
-    <input v-model="message" placeholder="Edit me">
-    <p>The message is: {{ message }}</p>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
-  <script src="/static/js/app.js"></script>
-</body>
-</html>
-```
-
-#### 5. 创建 `app.js`
-
-在 `app/static/js` 目录下创建 `app.js` 文件，内容如下：
-
-```javascript
-new Vue({
-  el: '#app',
-  data: {
-    message: 'Hello, Vue.js!'
-  }
-});
-```
-
-#### 6. 创建 `app.py`
-
-在 `app` 目录下创建 `app.py` 文件，内容如下：
-
-```python
-from flask import Flask, send_from_directory
-
-app = Flask(__name__, static_folder='static')
-
-@app.route('/')
-def serve():
-    return send_from_directory(app.static_folder, 'index.html')
-
-@app.route('/static/js/<path:path>')
-def send_js(path):
-    return send_from_directory('static/js', path)
-
-if __name__ == '__main__':
-    app.run(debug=True)
-```
-
-### 运行Flask应用
-
-1. 确保你在虚拟环境中，然后运行Flask应用：
-   ```bash
-   python app/app.py
-   ```
-
-2. 打开浏览器并访问 `http://127.0.0.1:5000`，你应该能看到你的Vue.js应用运行在Flask服务器上，并展示动态数据绑定和事件处理的特点。
-
-### 说明
-
-- `index.html` 中通过 `<script src="https://cdn.jsdelivr.net/npm/vue@2"></script>` 引入了Vue.js。
-- 通过 `v-model` 指令绑定输入框与 `message` 数据，展示了Vue.js的双向数据绑定特性。
-- `app.js` 中创建了一个新的 Vue 实例，绑定到 `#app` 元素，并定义了一个数据属性 `message`。
-
-这个示例展示了Vue.js的一些基本特性，包括动态数据绑定和双向数据绑定。通过这些特性，Vue.js可以轻松地创建响应式和交互式的用户界面。
+file_path = r"path\to\your\file.xlsx"  # 替换为你的Excel文件路径
+last_saved_date = get_excel_last_saved_date(file_path)
+print(f"Date last saved: {last_saved_date}")
