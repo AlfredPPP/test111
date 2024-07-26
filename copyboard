@@ -1,12 +1,9 @@
-import ctypes
-import ctypes.wintypes
+import win32net
+import win32netcon
 
-def get_full_name():
-    size = ctypes.wintypes.DWORD(0)
-    ctypes.windll.advapi32.GetUserNameExW(3, None, ctypes.byref(size))
-    name_buffer = ctypes.create_unicode_buffer(size.value)
-    ctypes.windll.advapi32.GetUserNameExW(3, name_buffer, ctypes.byref(size))
-    return name_buffer.value
+def get_user_full_name():
+    user_info = win32net.NetUserGetInfo(None, win32net.NetWkstaGetInfo(100)['username'], 10)
+    return user_info['full_name']
 
-full_name = get_full_name()
+full_name = get_user_full_name()
 print(f"The full name is: {full_name}")
