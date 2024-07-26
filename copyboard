@@ -1,54 +1,12 @@
-要快速读取文件的 "Date last saved" 信息，而不需要打开文件，可以使用 `pywin32` 库中的 `shell` 模块，它提供了访问文件属性的功能。以下是一个示例代码，展示如何使用 `pywin32.shell` 来获取文件的特定属性：
+import ctypes
+import ctypes.wintypes
 
-```python
-import win32com.client
+def get_full_name():
+    size = ctypes.wintypes.DWORD(0)
+    ctypes.windll.advapi32.GetUserNameExW(3, None, ctypes.byref(size))
+    name_buffer = ctypes.create_unicode_buffer(size.value)
+    ctypes.windll.advapi32.GetUserNameExW(3, name_buffer, ctypes.byref(size))
+    return name_buffer.value
 
-def get_file_last_saved_date(file_path):
-    properties = win32com.client.Dispatch("Shell.Application").NameSpace(file_path.rsplit("\\", 1)[0]).ParseName(file_path.rsplit("\\", 1)[1])
-    
-    # The index for "Date last saved" might differ, this needs to be verified
-    # 12 is a common index for "Date last saved" in many Office file properties
-    last_saved_date = properties.ExtendedProperty("Date last saved")
-    
-    return last_saved_date
-
-file_path = r"C:\path\to\your\file.xlsx"  # 替换为你的Excel文件路径
-last_saved_date = get_file_last_saved_date(file_path)
-print(f"Date last saved: {last_saved_date}")
-```
-
-### 详细说明：
-
-1. **获取文件的Shell属性**：
-   - 使用 `win32com.client.Dispatch("Shell.Application")` 创建Shell应用程序的实例。
-   - 使用 `NameSpace` 和 `ParseName` 方法获取文件的属性集合。
-
-2. **访问特定属性**：
-   - 使用 `ExtendedProperty` 方法访问文件的特定属性。注意，属性名称必须与文件的属性名称匹配。对于 "Date last saved"，可能需要尝试不同的名称或索引值。
-
-### 注意：
-
-- 不同文件类型的属性索引和名称可能不同。需要验证你的文件类型的具体属性名称。
-- 你可能需要调整示例中的索引或属性名称，以匹配实际文件的属性结构。
-
-### 示例：列出所有属性及其索引
-
-为了找出正确的属性索引，可以使用以下代码列出所有属性及其索引：
-
-```python
-import win32com.client
-
-def list_file_properties(file_path):
-    shell = win32com.client.Dispatch("Shell.Application")
-    folder = shell.NameSpace(file_path.rsplit("\\", 1)[0])
-    file = folder.ParseName(file_path.rsplit("\\", 1)[1])
-
-    for i in range(0, 266):
-        prop = folder.GetDetailsOf(file, i)
-        print(f"Index {i}: {prop}")
-
-file_path = r"C:\path\to\your\file.xlsx"  # 替换为你的Excel文件路径
-list_file_properties(file_path)
-```
-
-运行这个脚本将列出所有文件属性及其索引值，你可以找到 "Date last saved" 的具体索引，然后在上面的示例代码中使用该索引值。
+full_name = get_full_name()
+print(f"The full name is: {full_name}")
