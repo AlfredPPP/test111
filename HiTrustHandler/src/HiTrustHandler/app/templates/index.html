@@ -1,0 +1,33 @@
+<!-- src/HiTrustHandler/app/templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiTrust Handler</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+</head>
+<body>
+    <div id="app">
+        <div class="background">
+            <div class="center-container">
+                <div v-if="!loggedIn" class="login-container">
+                    <input type="text" v-model="username" placeholder="Username">
+                    <input type="password" v-model="password" placeholder="Password">
+                    <button @click="login">Login</button>
+                </div>
+                <div v-else class="source-container">
+                    <input type="text" v-model="source" placeholder="Source">
+                    <button @click="submitSource">Submit</button>
+                </div>
+            </div>
+            <div class="logo-bottom">
+                <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
