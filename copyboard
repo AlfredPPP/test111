@@ -1,18 +1,18 @@
 import pandas as pd
 
-# 创建一个 DataFrame 示例
+# 创建一个 DataFrame
 df = pd.DataFrame({
     'A': [10, 60, 30, 80],
     'B': [20, 50, 40, 70]
 })
 
 # 定义一个条件格式函数
-def highlight_cells(val):
-    color = 'yellow' if val > 50 else ''
-    return f'background-color: {color}'
+def highlight_cells(row):
+    color = 'yellow' if row['B'] > 50 else 'red'
+    return [f'background-color: {color}'] * len(row)
 
 # 应用条件格式
-styled_df = df.style.applymap(highlight_cells)
+styled_df = df.style.apply(highlight_cells, axis=1, subset=['A'])
 
 # 保存到 Excel
 styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
