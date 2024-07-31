@@ -1,18 +1,26 @@
-import pandas as pd
+    import pandas as pd
 
-# 创建一个 DataFrame
-df = pd.DataFrame({
-    'A': [10, 60, 30, 80],
-    'B': [20, 50, 40, 70]
-})
+    # 创建一个 DataFrame
+    df = pd.DataFrame({
+        'A': [10, 60, 30, 80],
+        'B': [20, 50, 40, 70]
+    })
+    # 先把b取出来
+    b = [20, 50, 40, 70]
+    df.drop(columns=['B'], inplace=True)
+    def call_b(b):
+        for i in b:
+            yield i
 
-# 定义一个条件格式函数
-def highlight_cells(row):
-    color = 'yellow' if row['B'] > 50 else 'red'
-    return [f'background-color: {color}'] * len(row)
 
-# 应用条件格式
-styled_df = df.style.apply(highlight_cells, axis=1, subset=['A'])
+    # 定义一个条件格式函数
+    def highlight_cells(row):
+        color = 'yellow' if call_b(b).__next__() > 50 else 'red'
+        return [f'background-color: {color}'] * len(row)
 
-# 保存到 Excel
-styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
+
+    # 应用条件格式
+    styled_df = df.style.apply(highlight_cells, axis=1, subset=['A'])
+
+    # 保存到 Excel
+    styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
