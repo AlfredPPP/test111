@@ -1,58 +1,26 @@
-import requests
-from functools import wraps
+    import pandas as pd
 
-class BaseSession:
-    def __init__(self):
-        self.session = requests.Session()
+    # 创建一个 DataFrame
+    df = pd.DataFrame({
+        'A': [10, 60, 30, 80],
+        'B': [20, 50, 40, 70]
+    })
+    # 先把b取出来
+    b = [20, 50, 40, 70]
+    df.drop(columns=['B'], inplace=True)
+    def call_b(b):
+        for i in b:
+            yield i
 
-    def request(self, method, url, **kwargs):
-        response = self.session.request(method, url, **kwargs)
-        return response
 
-class xxxSession(BaseSession):
-    def __init__(self, login_url, username, password):
-        super().__init__()
-        self.login_url = login_url
-        self.username = username
-        self.password = password
-        self.is_logged_in = False
-        self.login()
+    # 定义一个条件格式函数
+    def highlight_cells(row):
+        color = 'yellow' if call_b(b).__next__() > 50 else 'red'
+        return [f'background-color: {color}'] * len(row)
 
-    def login(self):
-        payload = {
-            'username': self.username,
-            'password': self.password
-        }
-        response = self.request('POST', self.login_url, data=payload)
-        if response.status_code == 200:
-            self.is_logged_in = True
-        else:
-            raise Exception('Login failed')
 
-    def ensure_login(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not self.is_logged_in:
-                self.login()
-            return func(self, *args, **kwargs)
-        return wrapper
+    # 应用条件格式
+    styled_df = df.style.apply(highlight_cells, axis=1, subset=['A'])
 
-    @ensure_login
-    def post_data(self, url, data):
-        response = self.request('POST', url, data=data)
-        return response
-
-# 使用示例
-if __name__ == '__main__':
-    login_url = 'https://example.com/login'
-    username = 'your_username'
-    password = 'your_password'
-    target_url = 'https://example.com/data/submit'
-    data = {
-        'key1': 'value1',
-        'key2': 'value2'
-    }
-
-    session = xxxSession(login_url, username, password)
-    response = session.post_data(target_url, data)
-    print(response.text)
+    # 保存到 Excel
+    styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
