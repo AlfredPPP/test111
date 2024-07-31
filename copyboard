@@ -1,18 +1,18 @@
-import openpyxl
-from openpyxl.styles import PatternFill
+import pandas as pd
 
-# 加载 Excel 文件
-workbook = openpyxl.load_workbook('example.xlsx')
-sheet = workbook.active
+# 创建一个 DataFrame 示例
+df = pd.DataFrame({
+    'A': [10, 60, 30, 80],
+    'B': [20, 50, 40, 70]
+})
 
-# 定义高亮样式
-highlight = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+# 定义一个条件格式函数
+def highlight_cells(val):
+    color = 'yellow' if val > 50 else ''
+    return f'background-color: {color}'
 
-# 遍历所有单元格，应用条件格式
-for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=1, max_col=sheet.max_column):
-    for cell in row:
-        if isinstance(cell.value, (int, float)) and cell.value > 50:  # 条件：单元格值大于50
-            cell.fill = highlight
+# 应用条件格式
+styled_df = df.style.applymap(highlight_cells)
 
-# 保存修改后的文件
-workbook.save('highlighted_example.xlsx')
+# 保存到 Excel
+styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
