@@ -1,8 +1,8 @@
-To create a status symbol that shows the program is still in the login process, you can use a spinning circle to indicate loading. Here's how you can implement it using Vue.js and CSS.
+To achieve the fade-in and fade-out effects, we can use Vue transitions along with some CSS animations. Vue provides a `<transition>` component that makes it easy to add animations when elements are inserted or removed from the DOM.
 
-### Step 1: Add a Loading Spinner in HTML
+### Step 1: Update the HTML to include Vue transitions
 
-1. **Update `index.html` to include a loading spinner:**
+1. **Update `index.html` to include transition wrappers:**
 
 ```html
 <!-- src/HiTrustHandler/app/templates/index.html -->
@@ -19,18 +19,24 @@ To create a status symbol that shows the program is still in the login process, 
     <div id="app">
         <div class="background">
             <div class="center-container">
-                <div v-if="!loggedIn && !loading" class="login-container">
-                    <input type="text" v-model="username" placeholder="Username">
-                    <input type="password" v-model="password" placeholder="Password">
-                    <button @click="login">Login</button>
-                </div>
-                <div v-if="loading" class="loading-container">
-                    <div class="spinner"></div>
-                </div>
-                <div v-if="loggedIn" class="source-container">
-                    <input type="text" v-model="source" placeholder="Source">
-                    <button @click="submitSource">Submit</button>
-                </div>
+                <transition name="fade">
+                    <div v-if="!loggedIn && !loading" class="login-container">
+                        <input type="text" v-model="username" placeholder="Username">
+                        <input type="password" v-model="password" placeholder="Password">
+                        <button @click="login">Login</button>
+                    </div>
+                </transition>
+                <transition name="fade">
+                    <div v-if="loading" class="loading-container">
+                        <div class="spinner"></div>
+                    </div>
+                </transition>
+                <transition name="fade">
+                    <div v-if="loggedIn" class="source-container">
+                        <input type="text" v-model="source" placeholder="Source">
+                        <button @click="submitSource">Submit</button>
+                    </div>
+                </transition>
             </div>
             <div class="logo-bottom">
                 <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
@@ -43,9 +49,9 @@ To create a status symbol that shows the program is still in the login process, 
 </html>
 ```
 
-### Step 2: Add CSS for the Spinner
+### Step 2: Add CSS for the fade transitions
 
-1. **Update `styles.css` to style the spinner:**
+1. **Update `styles.css` to include fade animations:**
 
 ```css
 /* src/HiTrustHandler/app/static/css/styles.css */
@@ -115,6 +121,13 @@ body, html {
     }
 }
 
+.fade-enter-active, .fade-leave-active {
+    transition: opacity 0.5s;
+}
+.fade-enter, .fade-leave-to /* .fade-leave-active in versions <2.1.8 */ {
+    opacity: 0;
+}
+
 .login-container input, .source-container input {
     margin: 10px;
     padding: 10px;
@@ -127,9 +140,9 @@ button {
 }
 ```
 
-### Step 3: Update Vue.js Script to Handle Loading State
+### Step 3: Update Vue.js Script to Handle Transitions
 
-1. **Update `app.js` to manage the loading state:**
+1. **Update `app.js` to manage the transition states:**
 
 ```javascript
 // src/HiTrustHandler/app/static/js/app.js
@@ -190,4 +203,4 @@ new Vue({
 });
 ```
 
-With these changes, the input boxes will be replaced by a loading spinner while the login process is in progress, providing visual feedback to the user.
+With these changes, the login and source input boxes will have a fade-out and fade-in effect, along with the loading spinner, providing a smooth transition experience for the user.
