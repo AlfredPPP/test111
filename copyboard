@@ -1,8 +1,8 @@
-To achieve the fade-in and fade-out effects, we can use Vue transitions along with some CSS animations. Vue provides a `<transition>` component that makes it easy to add animations when elements are inserted or removed from the DOM.
+To handle a failed login attempt and allow the user to re-login, we need to ensure that the loading spinner is replaced back with the input boxes if the login fails. Here's how we can adjust the code to support re-login attempts:
 
-### Step 1: Update the HTML to include Vue transitions
+### Step 1: Update `index.html` to include an error message
 
-1. **Update `index.html` to include transition wrappers:**
+1. **Update `index.html` to include an error message placeholder:**
 
 ```html
 <!-- src/HiTrustHandler/app/templates/index.html -->
@@ -19,24 +19,19 @@ To achieve the fade-in and fade-out effects, we can use Vue transitions along wi
     <div id="app">
         <div class="background">
             <div class="center-container">
-                <transition name="fade">
-                    <div v-if="!loggedIn && !loading" class="login-container">
-                        <input type="text" v-model="username" placeholder="Username">
-                        <input type="password" v-model="password" placeholder="Password">
-                        <button @click="login">Login</button>
-                    </div>
-                </transition>
-                <transition name="fade">
-                    <div v-if="loading" class="loading-container">
-                        <div class="spinner"></div>
-                    </div>
-                </transition>
-                <transition name="fade">
-                    <div v-if="loggedIn" class="source-container">
-                        <input type="text" v-model="source" placeholder="Source">
-                        <button @click="submitSource">Submit</button>
-                    </div>
-                </transition>
+                <div v-if="!loggedIn && !loading" class="login-container">
+                    <input type="text" v-model="username" placeholder="Username">
+                    <input type="password" v-model="password" placeholder="Password">
+                    <button @click="login">Login</button>
+                    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+                </div>
+                <div v-if="loading" class="loading-container">
+                    <div class="spinner"></div>
+                </div>
+                <div v-if="loggedIn" class="source-container">
+                    <input type="text" v-model="source" placeholder="Source">
+                    <button @click="submitSource">Submit</button>
+                </div>
             </div>
             <div class="logo-bottom">
                 <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
@@ -49,9 +44,9 @@ To achieve the fade-in and fade-out effects, we can use Vue transitions along wi
 </html>
 ```
 
-### Step 2: Add CSS for the fade transitions
+### Step 2: Update `styles.css` to style the error message
 
-1. **Update `styles.css` to include fade animations:**
+1. **Update `styles.css` to style the error message:**
 
 ```css
 /* src/HiTrustHandler/app/static/css/styles.css */
@@ -121,13 +116,6 @@ body, html {
     }
 }
 
-.fade-enter-active, .fade-leave-active {
-    transition: opacity 0.5s;
-}
-.fade-enter, .fade-leave-to /* .fade-leave-active in versions <2.1.8 */ {
-    opacity: 0;
-}
-
 .login-container input, .source-container input {
     margin: 10px;
     padding: 10px;
@@ -138,11 +126,16 @@ button {
     padding: 10px 20px;
     cursor: pointer;
 }
+
+.error {
+    color: red;
+    margin-top: 10px;
+}
 ```
 
-### Step 3: Update Vue.js Script to Handle Transitions
+### Step 3: Update `app.js` to handle login failures
 
-1. **Update `app.js` to manage the transition states:**
+1. **Update `app.js` to manage the error state:**
 
 ```javascript
 // src/HiTrustHandler/app/static/js/app.js
@@ -153,11 +146,13 @@ new Vue({
         password: '',
         source: '',
         loggedIn: false,
-        loading: false
+        loading: false,
+        errorMessage: ''
     },
     methods: {
         login() {
             this.loading = true;
+            this.errorMessage = '';
             fetch('/login', {
                 method: 'POST',
                 headers: {
@@ -171,12 +166,12 @@ new Vue({
                 if (data.status === 'success') {
                     this.loggedIn = true;
                 } else {
-                    alert('Login failed');
+                    this.errorMessage = 'Login failed. Please check your username and password.';
                 }
             })
             .catch(() => {
                 this.loading = false;
-                alert('An error occurred');
+                this.errorMessage = 'An error occurred. Please try again.';
             });
         },
         submitSource() {
@@ -203,4 +198,4 @@ new Vue({
 });
 ```
 
-With these changes, the login and source input boxes will have a fade-out and fade-in effect, along with the loading spinner, providing a smooth transition experience for the user.
+With these changes, if the user enters the wrong password or if there's an error during the login process, the loading spinner will disappear, and the input boxes will be shown again with an error message indicating what went wrong. This allows the user to correct their input and try to log in again.
