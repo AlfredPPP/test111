@@ -1,26 +1,193 @@
-    import pandas as pd
+To create a status symbol that shows the program is still in the login process, you can use a spinning circle to indicate loading. Here's how you can implement it using Vue.js and CSS.
 
-    # 创建一个 DataFrame
-    df = pd.DataFrame({
-        'A': [10, 60, 30, 80],
-        'B': [20, 50, 40, 70]
-    })
-    # 先把b取出来
-    b = [20, 50, 40, 70]
-    df.drop(columns=['B'], inplace=True)
-    def call_b(b):
-        for i in b:
-            yield i
+### Step 1: Add a Loading Spinner in HTML
 
+1. **Update `index.html` to include a loading spinner:**
 
-    # 定义一个条件格式函数
-    def highlight_cells(row):
-        color = 'yellow' if call_b(b).__next__() > 50 else 'red'
-        return [f'background-color: {color}'] * len(row)
+```html
+<!-- src/HiTrustHandler/app/templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiTrust Handler</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+</head>
+<body>
+    <div id="app">
+        <div class="background">
+            <div class="center-container">
+                <div v-if="!loggedIn && !loading" class="login-container">
+                    <input type="text" v-model="username" placeholder="Username">
+                    <input type="password" v-model="password" placeholder="Password">
+                    <button @click="login">Login</button>
+                </div>
+                <div v-if="loading" class="loading-container">
+                    <div class="spinner"></div>
+                </div>
+                <div v-if="loggedIn" class="source-container">
+                    <input type="text" v-model="source" placeholder="Source">
+                    <button @click="submitSource">Submit</button>
+                </div>
+            </div>
+            <div class="logo-bottom">
+                <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
+            </div>
+        </div>
+    </div>
 
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+```
 
-    # 应用条件格式
-    styled_df = df.style.apply(highlight_cells, axis=1, subset=['A'])
+### Step 2: Add CSS for the Spinner
 
-    # 保存到 Excel
-    styled_df.to_excel('styled_example.xlsx', engine='xlsxwriter', index=False)
+1. **Update `styles.css` to style the spinner:**
+
+```css
+/* src/HiTrustHandler/app/static/css/styles.css */
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: Arial, sans-serif;
+    background-color: rgba(230, 230, 255, 1); /* 90% white, 10% blue */
+}
+
+.background {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.logo-left {
+    position: relative;
+    top: 10px;
+    left: 10px;
+    width: 50%;
+    height: 50%;
+}
+
+.logo-bottom {
+    position: relative;
+    display: grid;
+    justify-content: center;
+    transform: scale(0.5);
+}
+
+.center-container {
+    position: relative;
+    padding-top: 17%;
+}
+
+.login-container, .source-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100px;
+}
+
+.spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: #09f;
+    animation: spin 1s ease infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.login-container input, .source-container input {
+    margin: 10px;
+    padding: 10px;
+    width: 200px;
+}
+
+button {
+    padding: 10px 20px;
+    cursor: pointer;
+}
+```
+
+### Step 3: Update Vue.js Script to Handle Loading State
+
+1. **Update `app.js` to manage the loading state:**
+
+```javascript
+// src/HiTrustHandler/app/static/js/app.js
+new Vue({
+    el: '#app',
+    data: {
+        username: '',
+        password: '',
+        source: '',
+        loggedIn: false,
+        loading: false
+    },
+    methods: {
+        login() {
+            this.loading = true;
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username: this.username, password: this.password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.loading = false;
+                if (data.status === 'success') {
+                    this.loggedIn = true;
+                } else {
+                    alert('Login failed');
+                }
+            })
+            .catch(() => {
+                this.loading = false;
+                alert('An error occurred');
+            });
+        },
+        submitSource() {
+            fetch('/submit_source', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ source: this.source })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Source submitted successfully');
+                } else {
+                    alert('Source submission failed');
+                }
+            })
+            .catch(() => {
+                alert('An error occurred');
+            });
+        }
+    }
+});
+```
+
+With these changes, the input boxes will be replaced by a loading spinner while the login process is in progress, providing visual feedback to the user.
