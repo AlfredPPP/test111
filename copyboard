@@ -1,8 +1,10 @@
-To handle a failed login attempt and allow the user to re-login, we need to ensure that the loading spinner is replaced back with the input boxes if the login fails. Here's how we can adjust the code to support re-login attempts:
+Let's move forward with implementing the additional UI features as you've designed. We'll break down the steps needed to implement the "data interface" and "real-time log interface" in your Flask + Vue.js application.
 
-### Step 1: Update `index.html` to include an error message
+### Step 1: Update the HTML Structure
 
-1. **Update `index.html` to include an error message placeholder:**
+We need to modify the `index.html` file to include the new components: the "data interface" on the left and the "real-time log interface" on the right.
+
+1. **Update `index.html`:**
 
 ```html
 <!-- src/HiTrustHandler/app/templates/index.html -->
@@ -33,6 +35,45 @@ To handle a failed login attempt and allow the user to re-login, we need to ensu
                     <button @click="submitSource">Submit</button>
                 </div>
             </div>
+
+            <!-- New Data Interface and Real-Time Log Interface -->
+            <div v-if="submitted" class="interface-container">
+                <div class="data-interface">
+                    <div class="interface-header">
+                        <button @click="getCusip">Get Cusip</button>
+                        <button @click="importData">Import Data</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" v-model="selectAll" @click="toggleSelectAll"> Select All</th>
+                                <th>Fund</th>
+                                <th>UR</th>
+                                <th>Cusip</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(fund, index) in funds" :key="index">
+                                <td><input type="checkbox" v-model="selectedFunds" :value="fund.name"></td>
+                                <td>{{ fund.name }}</td>
+                                <td>{{ fund.ur }}</td>
+                                <td>{{ fund.cusip || 'N/A' }}</td>
+                                <td v-if="fund.loading"><div class="spinner"></div></td>
+                                <td v-else>{{ fund.status }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="log-interface">
+                    <div class="log-header">Real-Time Log</div>
+                    <div class="log-content">
+                        <p v-for="log in logs">{{ log }}</p>
+                    </div>
+                </div>
+            </div>
+            <!-- End New Data Interface and Real-Time Log Interface -->
+
             <div class="logo-bottom">
                 <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
             </div>
@@ -44,9 +85,11 @@ To handle a failed login attempt and allow the user to re-login, we need to ensu
 </html>
 ```
 
-### Step 2: Update `styles.css` to style the error message
+### Step 2: Update CSS for the New Layout
 
-1. **Update `styles.css` to style the error message:**
+We'll add styles for the new elements like the data interface, real-time log, and table structure.
+
+1. **Update `styles.css`:**
 
 ```css
 /* src/HiTrustHandler/app/static/css/styles.css */
@@ -63,14 +106,6 @@ body, html {
     position: relative;
     width: 100%;
     height: 100%;
-}
-
-.logo-left {
-    position: relative;
-    top: 10px;
-    left: 10px;
-    width: 50%;
-    height: 50%;
 }
 
 .logo-bottom {
@@ -116,26 +151,71 @@ body, html {
     }
 }
 
-.login-container input, .source-container input {
-    margin: 10px;
-    padding: 10px;
-    width: 200px;
-}
-
-button {
-    padding: 10px 20px;
-    cursor: pointer;
-}
-
 .error {
     color: red;
     margin-top: 10px;
 }
+
+/* New styles for data interface and log interface */
+.interface-container {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+}
+
+.data-interface {
+    width: 60%;
+    border: 1px solid #ccc;
+    padding: 10px;
+    background-color: white;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.interface-header {
+    margin-bottom: 10px;
+}
+
+.log-interface {
+    width: 35%;
+    border: 1px solid #ccc;
+    padding: 10px;
+    background-color: white;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.log-header {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.log-content {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+th input[type="checkbox"] {
+    cursor: pointer;
+}
 ```
 
-### Step 3: Update `app.js` to handle login failures
+### Step 3: Update Vue.js Script to Handle New Features
 
-1. **Update `app.js` to manage the error state:**
+We need to add data and methods in `app.js` to manage the funds data, handle button clicks, and update the UI accordingly.
+
+1. **Update `app.js`:**
 
 ```javascript
 // src/HiTrustHandler/app/static/js/app.js
@@ -147,7 +227,12 @@ new Vue({
         source: '',
         loggedIn: false,
         loading: false,
-        errorMessage: ''
+        errorMessage: '',
+        submitted: false,
+        funds: [],
+        selectedFunds: [],
+        selectAll: false,
+        logs: []
     },
     methods: {
         login() {
@@ -175,27 +260,58 @@ new Vue({
             });
         },
         submitSource() {
-            fetch('/submit_source', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ source: this.source })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('Source submitted successfully');
-                } else {
-                    alert('Source submission failed');
+            this.logs.push(new Date().toLocaleString() + ": Start Processing...");
+            this.submitted = true;
+            // Mock data for funds
+            this.funds = [
+                { name: 'Fund 1', ur: 'UR1', cusip: '', status: '', loading: false },
+                { name: 'Fund 2', ur: 'UR2', cusip: '', status: '', loading: false },
+                { name: 'Fund 3', ur: 'UR3', cusip: '', status: '', loading: false }
+            ];
+        },
+        getCusip() {
+            this.selectedFunds.forEach(fundName => {
+                const fund = this.funds.find(f => f.name === fundName);
+                if (fund) {
+                    fund.loading = true;
+                    this.logs.push(new Date().toLocaleString() + ": Getting Cusip for " + fund.name);
+                    // Simulate API call to get Cusip
+                    setTimeout(() => {
+                        fund.cusip = '123456789'; // Mock Cusip value
+                        fund.loading = false;
+                        this.logs.push(new Date().toLocaleString() + ": Cusip received for " + fund.name);
+                    }, 2000);
                 }
-            })
-            .catch(() => {
-                alert('An error occurred');
             });
+        },
+        importData() {
+            this.selectedFunds.forEach(fundName => {
+                const fund = this.funds.find(f => f.name === fundName);
+                if (fund) {
+                    fund.loading = true;
+                    this.logs.push(new Date().toLocaleString() + ": Importing data for " + fund.name);
+                    // Simulate API call to import data
+                    setTimeout(() => {
+                        fund.status = 'Imported'; // Mock status
+                       
+
+ fund.loading = false;
+                        this.logs.push(new Date().toLocaleString() + ": Data imported for " + fund.name);
+                    }, 2000);
+                }
+            });
+        },
+        toggleSelectAll() {
+            this.selectedFunds = this.selectAll ? this.funds.map(f => f.name) : [];
         }
     }
 });
 ```
 
-With these changes, if the user enters the wrong password or if there's an error during the login process, the loading spinner will disappear, and the input boxes will be shown again with an error message indicating what went wrong. This allows the user to correct their input and try to log in again.
+### Step 4: Backend Integration (Optional)
+
+You may also need to integrate backend routes to handle the Cusip retrieval and data importation based on the actual API logic. You can update the `getCusip` and `importData` methods in `app.js` to make API calls to your Flask backend.
+
+### Summary
+
+With these updates, you've added the "data interface" and "real-time log interface" to your UI. The "data interface" allows users to select funds, request their Cusip numbers, or import data with status updates and spinning indicators to show processing. The "real-time log interface" provides a scrollable area where logs are displayed as processes run. This setup is interactive and allows for expanding functionalities as needed.
