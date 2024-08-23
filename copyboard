@@ -1,28 +1,143 @@
-根据你更新的图片情况，我们需要处理负数的情况（即数据后面有短横的情况）。你可以使用以下更新后的正则表达式来提取数据，包括负数：
+To implement the logging functionality across your project and make the logs accessible through a "Log" button in the frontend, you'll need to follow these steps:
+
+### Step 1: Set Up Centralized Logging
+
+We'll create a centralized logging setup that can be used across all Python files in your project.
+
+1. **Create a `logger.py` file in a common directory (e.g., `src/HiTrustHandler/utils/logger.py`)**:
 
 ```python
-import re
+import logging
+import os
 
-line = "你的行数据在这里"  # 替换为你从PDF读取的实际行数据
+# Define log file path
+log_file_path = os.path.join(os.path.dirname(__file__), '..', 'logs', 'app.log')
 
-# 更新的正则表达式，支持负数（数据后带有短横）
-pattern = r'(?<!\S)(-?\d*\.\d+|-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)(-)?(?!\S)'
+# Create logs directory if it doesn't exist
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
-# 使用findall方法提取所有匹配的数字
-matches = re.findall(pattern, line)
+# Configure the logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file_path),
+        logging.StreamHandler()  # This will also output to the terminal
+    ]
+)
 
-# 对提取的结果进行处理，将负数和正数的情况分开处理
-numbers = []
-for match in matches:
-    num = match[0] + ('-' if match[2] == '-' else '')
-    numbers.append(num)
+# Get a logger instance
+logger = logging.getLogger('HiTrustHandlerLogger')
 
-print(numbers)
+# Example of adding a traceback to log exception with line number
+def log_exception(exc):
+    logger.error("Exception occurred", exc_info=exc)
+
+# Log file path (for Flask to serve)
+def get_log_file_path():
+    return log_file_path
 ```
 
-### 解释
-- `-?\d*\.\d+` 和 `-?\d{1,3}(?:,\d{3})*(?:\.\d+)?` 处理可能为负数的数字，其中 `-?` 表示负号是可选的。
-- `-` 捕捉行尾的负号，并将其与数字合并。
-- 最后，我们遍历匹配的结果 `matches`，根据是否有负号将负数和正数分别处理。
+### Step 2: Use the Logger Across Your Project
 
-你可以将这个逻辑应用到你的Python脚本中，确保从PDF读取的每一行数据都能被正确解析并提取为一个列表，列表中的每个元素就是一个数字（包括负数）。
+In each of your Python files where you want to log information, you can use the logger like this:
+
+```python
+from .utils.logger import logger, log_exception
+
+def some_function():
+    try:
+        # Your code here
+        logger.info("Function executed successfully")
+    except Exception as e:
+        log_exception(e)
+```
+
+This setup ensures that all logs from various parts of your project are written to the same `app.log` file.
+
+### Step 3: Serve the Log File in Flask
+
+Create a new Flask route that serves the log file so it can be accessed when the "Log" button is clicked.
+
+1. **Add a route in `main.py` to serve the log file:**
+
+```python
+from flask import send_file
+from .utils.logger import get_log_file_path
+
+@app.route('/get_log')
+def get_log():
+    log_file_path = get_log_file_path()
+    return send_file(log_file_path, as_attachment=False)
+```
+
+### Step 4: Add the "Log" Button to Your HTML
+
+Add a "Log" button to the HTML, which will make an HTTP request to the Flask route to fetch the log file and display it in a new tab.
+
+1. **Update `index.html` to include the "Log" button:**
+
+```html
+<!-- Add the Log button at the right-up corner -->
+<div id="app">
+    <div class="background">
+        <div class="right-up-corner">
+            <button @click="viewLog">View Log</button>
+        </div>
+        <!-- Other HTML content here... -->
+    </div>
+</div>
+```
+
+2. **Update the CSS to position the button:**
+
+```css
+/* src/HiTrustHandler/app/static/css/styles.css */
+.right-up-corner {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+}
+
+.right-up-corner button {
+    padding: 10px;
+    cursor: pointer;
+}
+```
+
+3. **Add the JavaScript method to handle the button click in `app.js`:**
+
+```javascript
+// src/HiTrustHandler/app/static/js/app.js
+new Vue({
+    el: '#app',
+    data: {
+        // Existing data properties...
+    },
+    methods: {
+        // Existing methods...
+
+        viewLog() {
+            window.open('/get_log', '_blank');
+        }
+    }
+});
+```
+
+### Step 5: Ensure the Log Directory Exists
+
+Make sure that the log directory is created before any logging happens. The `logger.py` code already handles this by creating the directory if it doesn't exist:
+
+```python
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+```
+
+### Summary
+
+With these steps:
+
+- You have a centralized logging system where all logs, including exceptions with specific line numbers, are recorded in a single log file (`app.log`).
+- You have added a "Log" button to your HTML, which, when clicked, opens the log file in a new browser tab.
+- This log file is served by a Flask route, ensuring that it's accessible via the web interface.
+
+This setup will help you monitor the application, troubleshoot issues, and keep a consistent log across all parts of your project.
