@@ -1,4 +1,4 @@
-# Scrapy settings for scrapy_handler project
+# Scrapy settings for dmh_handler project
 #
 # For simplicity, this file contains only settings considered important or
 # commonly used. You can find more settings consulting the documentation:
@@ -7,14 +7,14 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = "scrapy_handler"
+BOT_NAME = "dmh_handler"
 
-SPIDER_MODULES = ["scrapy_handler.spiders"]
-NEWSPIDER_MODULE = "scrapy_handler.spiders"
+SPIDER_MODULES = ["dmh_handler.spiders"]
+NEWSPIDER_MODULE = "dmh_handler.spiders"
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "scrapy_handler (+http://www.yourdomain.com)"
+#USER_AGENT = "dmh_handler (+http://www.yourdomain.com)"
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -45,13 +45,13 @@ ROBOTSTXT_OBEY = True
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 #SPIDER_MIDDLEWARES = {
-#    "scrapy_handler.middlewares.ScrapyHandlerSpiderMiddleware": 543,
+#    "dmh_handler.middlewares.ScrapyHandlerSpiderMiddleware": 543,
 #}
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #DOWNLOADER_MIDDLEWARES = {
-#    "scrapy_handler.middlewares.ScrapyHandlerDownloaderMiddleware": 543,
+#    "dmh_handler.middlewares.ScrapyHandlerDownloaderMiddleware": 543,
 #}
 
 # Enable or disable extensions
@@ -63,7 +63,7 @@ ROBOTSTXT_OBEY = True
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 #ITEM_PIPELINES = {
-#    "scrapy_handler.pipelines.ScrapyHandlerPipeline": 300,
+#    "dmh_handler.pipelines.ScrapyHandlerPipeline": 300,
 #}
 
 # Enable and configure the AutoThrottle extension (disabled by default)

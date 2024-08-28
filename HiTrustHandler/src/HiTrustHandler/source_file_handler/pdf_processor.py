@@ -1,4 +1,4 @@
-# src/HiTrustHandler/pdf_handler/pdf_processor.py
+# src/HiTrustHandler/source_file_handler/pdf_processor.py
 import pdfplumber
 
 def process_pdf(file_path):

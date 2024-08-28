@@ -1,4 +1,4 @@
-# src/HiTrustHandler/scrapy_handler/run_spider.py
+# src/HiTrustHandler/dmh_handler/run_spider.py
 from twisted.internet import reactor
 from scrapy.crawler import CrawlerRunner
 from scrapy.utils.log import configure_logging

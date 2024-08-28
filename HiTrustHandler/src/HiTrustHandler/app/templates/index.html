@@ -9,25 +9,94 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
 </head>
 <body>
-    <div id="app">
-        <div class="background">
-            <div class="center-container">
-                <div v-if="!loggedIn" class="login-container">
-                    <input type="text" v-model="username" placeholder="Username">
-                    <input type="password" v-model="password" placeholder="Password">
-                    <button @click="login">Login</button>
-                </div>
-                <div v-else class="source-container">
-                    <input type="text" v-model="source" placeholder="Source">
-                    <button @click="submitSource">Submit</button>
-                </div>
-            </div>
-            <div class="logo-bottom">
-                <img src="{{ url_for('static', filename='images/logo2.png') }}" class="logo-bottom" alt="Logo 2">
-            </div>
+<div id="app">
+    <div class="background">
+        <div class="logger_button">
+            <button @click="viewLog">View Log</button>
         </div>
-    </div>
+        <div class="title">
+            <h1 class="title-text">HiTrust Handler</h1>
+        </div>
+        <div class="center-container">
+            <transition name="fade">
+                <div v-if="!loggedIn && !loading" class="login-container">
+                    <div class="login-container-username">
+                        <input type="text" v-model="username" placeholder="Username">
+                    </div>
+                    <div class="login-container-password">
+                        <input type="password" v-model="password" placeholder="Password">
+                    </div>
+                    <div class="login-container-submit">
+                        <button @click="login">Login</button>
+                    </div>
+                    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+                </div>
+            </transition>
+            <transition name="fade">
+                <div v-if="loading" class="loading-container">
+                    <div class="spinner"></div>
+                </div>
+            </transition>
+            <transition name="fade">
+                <div v-if="loggedIn" class="source-container">
+                    <div class="source-container-source">
+                        <input type="text" v-model="source" placeholder="Source">
+                    </div>
+                    <div class="source-container-submit">
+                        <button @click="submitSource">Submit</button>
+                    </div>
+                </div>
+            </transition>
+        </div>
+        <!-- New Data Interface and Real-Time Log Interface -->
+        <transition name="fade">
+            <div v-if="submitted" class="interface-container">
+                <div class="data-interface">
+                    <div class="interface-header">
+                        <button @click="getCusip">Get Cusip</button>
+                        <button @click="importData">Import Data</button>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th><input type="checkbox" v-model="selectAll" @click="toggleSelectAll"> Select All</th>
+                            <th>Source files</th>
+                            <th>Fund code</th>
+                            <th>UR code</th>
+                            <th>Investment status</th>
+                            <th>Cusip</th>
+                            <th>Status</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="(fund, index) in funds" :key="index">
+                            <td><input type="checkbox" v-model="selectedFunds" :value="fund.source_file"></td>
+                            <td>[[ fund.source_file ]]</td>
+                            <td>[[ fund.fund_code ]]</td>
+                            <td>[[ fund.ur_code ]]</td>
+                            <td>[[ fund.investment_status | default('N/A') ]]</td>
+                            <td>[[ fund.cusip | default('N/A') ]]</td>
+                            <td v-if="fund.loading">
+                                <div class="spinner"></div>
+                            </td>
+                            <td v-else>[[ fund.status ]]</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="log-interface">
+                    <div class="log-header">Real-Time Log</div>
+                    <div class="log-content">
+                        <p v-for="log in logs">[[ log ]]</p>
+                    </div>
+                </div>
+            </div>
+        </transition>
+        <!-- End New Data Interface and Real-Time Log Interface -->
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
