@@ -228,3 +228,121 @@ class MainWindow(QMainWindow):
 - Error handling and more robust network operations management might be necessary depending on the complexity and requirements of your application.
 
 This setup allows you to migrate your Flask + Vue application logic into a PySide6 application, managing asynchronous operations effectively while keeping your UI responsive.
+
+
+
+
+
+
+
+Sure, I can help you adapt the PySide6 code to work with PySide2. The transition should be straightforward, as PySide2 and PySide6 are quite similar in many aspects, especially for basic components and operations. Here's the adjusted version of the MainWindow class for PySide2:
+
+### Adjustments for PySide2
+
+The main changes typically involve minor tweaks in how you import modules or handle certain UI components. Below is the revised code for PySide2:
+
+```python
+import sys
+from PySide2.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QMessageBox
+from PySide2.QtCore import QRunnable, QThreadPool, Slot
+
+class Worker(QRunnable):
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        self.fn(*self.args, **self.kwargs)
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super(MainWindow, self).__init__()
+        self.setWindowTitle("HiTrust Handler")
+        self.setGeometry(100, 100, 800, 600)  # x, y, width, height
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        self.setup_ui()
+        self.thread_pool = QThreadPool()
+
+    def setup_ui(self):
+        self.username_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.login_button = QPushButton("Login")
+        self.log_button = QPushButton("View Log")
+        self.source_input = QLineEdit()
+        self.submit_button = QPushButton("Submit Source")
+        self.cusip_button = QPushButton("Get Cusip")
+        self.import_button = QPushButton("Import Data")
+
+        self.layout.addWidget(QLabel("Username:"))
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(QLabel("Password:"))
+        self.layout.addWidget(self.password_input)
+        self.layout.addWidget(self.login_button)
+        self.layout.addWidget(self.log_button)
+        self.layout.addWidget(QLabel("Source:"))
+        self.layout.addWidget(self.source_input)
+        self.layout.addWidget(self.submit_button)
+        self.layout.addWidget(self.cusip_button)
+        self.layout.addWidget(self.import_button)
+
+        self.login_button.clicked.connect(self.on_login_clicked)
+        self.log_button.clicked.connect(self.on_log_clicked)
+        self.submit_button.clicked.connect(self.on_submit_clicked)
+        self.cusip_button.clicked.connect(self.on_cusip_clicked)
+        self.import_button.clicked.connect(self.on_import_clicked)
+
+    @Slot()
+    def on_login_clicked(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        self.thread_pool.start(Worker(self.login, username, password))
+
+    def login(self, username, password):
+        # Implement login logic, potentially with requests.post() and handling response
+        pass
+
+    @Slot()
+    def on_log_clicked(self):
+        self.thread_pool.start(Worker(self.view_log))
+
+    def view_log(self):
+        # Implement log viewing logic, similar to requests.get() and handling response
+        pass
+
+    @Slot()
+    def on_submit_clicked(self):
+        source = self.source_input.text()
+        self.thread_pool.start(Worker(self.submit_source, source))
+
+    def submit_source(self, source):
+        # Implement source submission logic
+        pass
+
+    @Slot()
+    def on_cusip_clicked(self):
+        # Implement Cusip retrieval logic
+        pass
+
+    @Slot()
+    def on_import_clicked(self):
+        # Implement data importing logic
+        pass
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
+```
+
+### Key Differences
+- `QRunnable`, `QThreadPool`, and `QMessageBox` imports come from `PySide2.QtCore` and `PySide2.QtWidgets` instead of `PySide6.QtCore` and `PySide6.QtWidgets`.
+- Inheritance and method signatures might slightly change as shown above (`super()` calls need specific class references in Python 2 style, which is still supported in PySide2 for backward compatibility).
+
+This version should align well with the PySide2 framework while maintaining similar functionality to what was designed for PySide6. Make sure to manage package dependencies correctly, especially if switching between Qt versions in your development environment.
