@@ -1,71 +1,82 @@
-The error you're encountering, `"QObject::setParent: Cannot set parent, new parent is in a different thread"`, is typically due to trying to interact with Qt GUI elements from a different thread than the one they were created in. In Qt (and many GUI frameworks), UI components can only be safely manipulated from the main GUI thread.
-
-### Understanding the Problem
-
-In your case, it sounds like you're trying to display a message box (`QMessageBox.information`) directly from within a worker thread that handles the login operation. This is what's likely causing the issue. Even if you're creating a new `QMessageBox` within the thread, it still counts as GUI interaction, which Qt restricts to the main thread to ensure thread safety.
-
-### Solution
-
-To resolve this issue, you'll need to signal back to the main thread to perform any UI updates or interactions. In PySide2, you can use signals and slots to achieve this safely. Here’s how you can modify your implementation:
-
-1. **Define a Signal:**
-   You need to define a custom signal in your worker class that can be emitted when you want to show the message box.
-
-2. **Connect the Signal to a Slot in the Main Thread:**
-   This slot will be responsible for displaying the message box.
-
-3. **Emit the Signal from the Worker Thread:**
-
-Here's an example of how you can set this up:
+将多线程的部分改为使用 `asyncio` 可以减少复杂性，并且利用 Python 标准库中的功能。下面是你提供的代码的改写版本，其中将 `QRunnable` 和 `QThreadPool` 替换为了 `asyncio` 的异步任务管理。
 
 ```python
-from PySide2.QtCore import QObject, Signal, Slot
-from PySide2.QtWidgets import QMessageBox
+import sys
+import os
+import asyncio
+from PySide2.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QMessageBox
+from PySide2.QtCore import Slot
+from ui_mainwindow import Ui_MainWindow
 
-class Worker(QRunnable):
-    login_success = Signal(str)  # Signal to indicate login success
+import requests  # To handle HTTP requests
 
-    def __init__(self, fn, *args, **kwargs):
-        super(Worker, self).__init__()
-        self.fn = fn
-        self.args = args
-        self.kwargs = kwargs
+class MainWindow(QMainWindow, Ui_MainWindow):
+    def __init__(self, parent=None):
+        super(MainWindow, self).__init__(parent)
+        self.setWindowTitle("HiTrust Handler")
+        self.setGeometry(100, 100, 800, 600)  # x, y, width, height
 
-    def run(self):
-        # Assuming `self.fn` performs the login and returns a success message
-        result_message = self.fn(*self.args, **self.kwargs)
-        self.login_success.emit(result_message)  # Emit the signal with the result
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super(MainWindow, self).__init__()
-        # Setup UI and other components here...
-        self.thread_pool = QThreadPool()
-        # Connect worker's signal to a slot
-        self.worker = Worker(self.login)
-        self.worker.login_success.connect(self.show_login_result)
+        self.setupUi(self)
+
+        self.login_button.clicked.connect(self.on_login_clicked)
+        self.log_button.clicked.connect(self.on_log_clicked)
+        self.submit_button.clicked.connect(self.on_submit_clicked)
+        self.cusip_button.clicked.connect(self.on_cusip_clicked)
+        self.import_button.clicked.connect(self.on_import_clicked)
+
+        self.dmh_session = None
 
     @Slot(str)
-    def show_login_result(self, message):
-        QMessageBox.information(self, "Login", message)
+    def show_box_message(self, message):
+        QMessageBox.information(self, 'HiTrust Handler', message)
 
-    def login(self, username, password):
-        # Perform login logic here
-        session = dmh_session(username, password)
-        # Return a message based on login success or failure
-        return "Login successful!" if session.is_logged_in else "Login failed"
+    async def login(self, username, password):
+        # 模拟异步登录操作，这里你可以替换成真实的异步网络请求
+        await asyncio.sleep(2)
+        return f"Logged in as {username}"
 
-    # Add logic to start the worker
-    def start_login(self):
-        username = "your_username"
-        password = "your_password"
-        self.thread_pool.start(Worker(self.login, username, password))
+    @Slot()
+    def on_login_clicked(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        asyncio.create_task(self.handle_login(username, password))
+
+    async def handle_login(self, username, password):
+        message = await self.login(username, password)
+        self.show_box_message(message)
+
+if __name__ == '__main__':
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from dmh_handler.dmh_session import dmh_session
+    from source_file_handler.parser import hi_trust_parser
+    from utils.helpers import copy_files_to_local, get_cache_directory
+    from utils.logger import get_log_file_path, logger, log_exception
+    
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(loop.create_task(asyncio.sleep(0)))  # 这行确保事件循环不会立即退出
+    sys.exit(app.exec_())
 ```
 
-### Summary
+### 主要改动：
 
-- Ensure all GUI interactions happen on the main thread.
-- Use signals and slots to communicate between threads.
-- Modify the worker to emit a signal when it needs to update the UI or display a message.
+1. **移除了 `QRunnable` 和 `QThreadPool`**：这些类用于多线程处理，现已替换为 `asyncio` 提供的异步任务机制。
+  
+2. **改用 `asyncio.create_task` 创建异步任务**：在点击登录按钮时，创建了一个异步任务来处理登录过程。
 
-This approach ensures that your application adheres to Qt's threading and GUI update requirements, preventing cross-thread GUI manipulation errors.
+3. **`login` 方法变为异步函数**：使用 `async def` 定义，并在内部模拟异步操作（例如网络请求）时使用 `await asyncio.sleep(2)`。
+
+4. **事件循环**：确保 `asyncio` 的事件循环与 Qt 的事件循环共同运行。这里使用了 `loop.run_until_complete` 来启动一个虚拟任务，避免事件循环在 `sys.exit(app.exec_())` 调用之前退出。
+
+### 注意事项：
+
+- 你可能需要将实际的同步请求替换为 `aiohttp` 或类似的异步库来实现真正的异步请求。
+- 在将整个代码改为异步之后，最好检查与 UI 相关的部分，确保没有阻塞操作会影响 UI 的响应速度。
