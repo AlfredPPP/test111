@@ -1,42 +1,21 @@
-import shutil
-import os
-import time
-import filecmp
+import pythoncom
+from win32com.shell import shell
 
-def copy_files(copy_from=None, folder_copy_to='', model='') -> None:
-    if not os.path.exists(folder_copy_to):
-        os.makedirs(folder_copy_to)
+def get_shortcut_target(shortcut_path):
+    shell_link = pythoncom.CoCreateInstance(
+        shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+    )
+    
+    # 访问 IPersistFile 接口以加载 .lnk 文件
+    persist_file = shell_link.QueryInterface(pythoncom.IID_IPersistFile)
+    persist_file.Load(shortcut_path)
+    
+    # 获取目标路径
+    target_path, _ = shell_link.GetPath(shell.SLGP_UNCPRIORITY)
+    
+    return target_path
 
-    start_time = time.time()
-
-    if model == 'folder':
-        for filename in os.listdir(copy_from):
-            remote_file = os.path.join(copy_from, filename)
-            local_file = os.path.join(folder_copy_to, filename)
-            if os.path.isfile(remote_file):
-                if not os.path.exists(local_file) or not filecmp.cmp(remote_file, local_file, shallow=True):
-                    try:
-                        shutil.copy2(remote_file, local_file)
-                    except Exception as e:
-                        print(f"Failed to copy file {remote_file}. Reason: {e}")
-
-    elif model == 'file':
-        # 复制单个文件
-        if os.path.isfile(copy_from):
-            remote_file = copy_from
-            local_file = os.path.join(folder_copy_to, os.path.basename(copy_from))
-            try:
-                shutil.copy2(remote_file, local_file)
-                print(f"Successfully copied file {remote_file} to {local_file}")
-            except Exception as e:
-                print(f"Failed to copy file {remote_file}. Reason: {e}")
-        else:
-            print(f"The specified file {copy_from} does not exist.")
-
-    end_time = time.time()
-    print(f"Copying files took {end_time - start_time:.2f} seconds")
-
-if __name__ == "__main__":
-    # 示例调用
-    fund_code = "BQ6C"
-    copy_files(copy_from="C:/path/to/single/file.txt", folder_copy_to="C:/path/to/destination/folder", model='file')
+# 使用示例
+shortcut = r"C:\path\to\your\shortcut.lnk"
+target = get_shortcut_target(shortcut)
+print(f"Target path: {target}")
