@@ -1,15 +1,23 @@
-import winshell
 import os
+import pythoncom
+from win32com.shell import shell, shellcon
 
 def create_shortcut(target_path, shortcut_name, shortcut_folder):
     # 拼接快捷方式的完整路径
     shortcut_path = os.path.join(shortcut_folder, f"{shortcut_name}.lnk")
     
     # 创建快捷方式
-    with winshell.shortcut(shortcut_path) as shortcut:
-        shortcut.path = target_path  # 目标路径
-        shortcut.description = f"Shortcut to {target_path}"  # 可选：快捷方式的描述
-        shortcut.working_directory = os.path.dirname(target_path)  # 可选：工作目录
+    shell_link = pythoncom.CoCreateInstance(
+        shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+    )
+    shell_link.SetPath(target_path)
+    
+    # 设置工作目录为目标的文件夹
+    shell_link.SetWorkingDirectory(os.path.dirname(target_path))
+    
+    # 访问 IPersistFile 接口保存快捷方式
+    persist_file = shell_link.QueryInterface(pythoncom.IID_IPersistFile)
+    persist_file.Save(shortcut_path, 0)
 
     print(f"Shortcut '{shortcut_name}' created in '{shortcut_folder}'.")
 
