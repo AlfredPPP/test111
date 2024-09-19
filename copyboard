@@ -1,29 +1,42 @@
+import shutil
 import os
-import pythoncom
-from win32com.shell import shell, shellcon
+import time
+import filecmp
 
-def create_shortcut(target_path, shortcut_name, shortcut_folder):
-    # 拼接快捷方式的完整路径
-    shortcut_path = os.path.join(shortcut_folder, f"{shortcut_name}.lnk")
-    
-    # 创建快捷方式
-    shell_link = pythoncom.CoCreateInstance(
-        shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
-    )
-    shell_link.SetPath(target_path)
-    
-    # 设置工作目录为目标的文件夹
-    shell_link.SetWorkingDirectory(os.path.dirname(target_path))
-    
-    # 访问 IPersistFile 接口保存快捷方式
-    persist_file = shell_link.QueryInterface(pythoncom.IID_IPersistFile)
-    persist_file.Save(shortcut_path, 0)
+def copy_files(copy_from=None, folder_copy_to='', model='') -> None:
+    if not os.path.exists(folder_copy_to):
+        os.makedirs(folder_copy_to)
 
-    print(f"Shortcut '{shortcut_name}' created in '{shortcut_folder}'.")
+    start_time = time.time()
 
-# 使用示例
-target = r"C:\path\to\target\file_or_folder"  # 目标路径
-name = "aaa"  # 快捷方式名称
-folder = r"C:\path\to\folder"  # 创建快捷方式的文件夹
+    if model == 'folder':
+        for filename in os.listdir(copy_from):
+            remote_file = os.path.join(copy_from, filename)
+            local_file = os.path.join(folder_copy_to, filename)
+            if os.path.isfile(remote_file):
+                if not os.path.exists(local_file) or not filecmp.cmp(remote_file, local_file, shallow=True):
+                    try:
+                        shutil.copy2(remote_file, local_file)
+                    except Exception as e:
+                        print(f"Failed to copy file {remote_file}. Reason: {e}")
 
-create_shortcut(target, name, folder)
+    elif model == 'file':
+        # 复制单个文件
+        if os.path.isfile(copy_from):
+            remote_file = copy_from
+            local_file = os.path.join(folder_copy_to, os.path.basename(copy_from))
+            try:
+                shutil.copy2(remote_file, local_file)
+                print(f"Successfully copied file {remote_file} to {local_file}")
+            except Exception as e:
+                print(f"Failed to copy file {remote_file}. Reason: {e}")
+        else:
+            print(f"The specified file {copy_from} does not exist.")
+
+    end_time = time.time()
+    print(f"Copying files took {end_time - start_time:.2f} seconds")
+
+if __name__ == "__main__":
+    # 示例调用
+    fund_code = "BQ6C"
+    copy_files(copy_from="C:/path/to/single/file.txt", folder_copy_to="C:/path/to/destination/folder", model='file')
