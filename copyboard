@@ -1,77 +1,21 @@
-你可以通过以下方式实现你提到的功能，添加一个逻辑来检查`local_folder`下的`last_run_date.txt`文件，如果该文件存在且记录的日期与当前日期相差超过一天，则清空文件夹并继续执行后续的文件复制逻辑。
-
-我将示例代码更新如下：
-
-```python
+import winshell
 import os
-import time
-import shutil
-import filecmp
-from datetime import datetime
 
-def get_cache_directory() -> str:
-    app_cache_dir = cache_dir / "TaxAutomation/HiTrust"
-    app_cache_dir.mkdir(parents=True, exist_ok=True)
-    return app_cache_dir
-
-def clear_local_folder(local_folder):
-    for filename in os.listdir(local_folder):
-        file_path = os.path.join(local_folder, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-        except Exception as e:
-            print(f"Failed to delete {file_path}. Reason: {e}")
-
-def update_last_run_date(local_folder):
-    last_run_file = os.path.join(local_folder, "last_run_date.txt")
-    with open(last_run_file, 'w') as f:
-        f.write(datetime.now().strftime('%Y-%m-%d'))
-
-def check_last_run_date(local_folder):
-    last_run_file = os.path.join(local_folder, "last_run_date.txt")
-    if os.path.exists(last_run_file):
-        with open(last_run_file, 'r') as f:
-            last_run_date_str = f.read()
-            last_run_date = datetime.strptime(last_run_date_str, '%Y-%m-%d')
-            if (datetime.now() - last_run_date).days >= 1:
-                # 如果相差一天或以上，清空local folder
-                clear_local_folder(local_folder)
-    # 更新上次运行日期
-    update_last_run_date(local_folder)
-
-def copy_files_to_local(remote_folder=None, local_folder=get_cache_directory()) -> None:
-    if not os.path.exists(local_folder):
-        os.makedirs(local_folder)
+def create_shortcut(target_path, shortcut_name, shortcut_folder):
+    # 拼接快捷方式的完整路径
+    shortcut_path = os.path.join(shortcut_folder, f"{shortcut_name}.lnk")
     
-    # 检查并清空local_folder如果需要
-    check_last_run_date(local_folder)
+    # 创建快捷方式
+    with winshell.shortcut(shortcut_path) as shortcut:
+        shortcut.path = target_path  # 目标路径
+        shortcut.description = f"Shortcut to {target_path}"  # 可选：快捷方式的描述
+        shortcut.working_directory = os.path.dirname(target_path)  # 可选：工作目录
 
-    start_time = time.time()
-    for filename in os.listdir(remote_folder):
-        # 如果文件符合业务逻辑
-        remote_file = os.path.join(remote_folder, filename)
-        local_file = os.path.join(local_folder, filename)
-        if os.path.isfile(remote_file):
-            if not os.path.exists(local_file) or not filecmp.cmp(remote_file, local_file, shallow=True):
-                try:
-                    shutil.copy2(remote_file, local_file)
-                except Exception as e:
-                    logger.error(f"Error in copying file {remote_file} because {e}")
-    
-    end_time = time.time()
-    logger.info(f"Copying files took {end_time - start_time:.2f} seconds")
+    print(f"Shortcut '{shortcut_name}' created in '{shortcut_folder}'.")
 
-if __name__ == "__main__":
-    # 示例调用
-    copy_files_to_local(remote_folder="path_to_remote_folder")
-```
+# 使用示例
+target = r"C:\path\to\target\file_or_folder"  # 目标路径
+name = "aaa"  # 快捷方式名称
+folder = r"C:\path\to\folder"  # 创建快捷方式的文件夹
 
-### 主要步骤：
-1. **`check_last_run_date()`**：这个函数检查`local_folder`下是否有`last_run_date.txt`文件，如果文件存在且记录的日期与当前日期相差一天或以上，则调用`clear_local_folder()`函数清空文件夹的内容。最后，它会更新`last_run_date.txt`文件为当前日期。
-2. **`clear_local_folder()`**：清空指定的文件夹内的所有文件和子目录。
-3. **`update_last_run_date()`**：用于更新`last_run_date.txt`文件，记录函数的运行日期。
-
-这样每次运行`copy_files_to_local()`函数时，如果上次运行已经超过一天，`local_folder`会被清空，然后按照正常逻辑进行文件复制。
+create_shortcut(target, name, folder)
