@@ -1,21 +1,28 @@
-import pythoncom
-from win32com.shell import shell
+import ctypes
+import os
 
 def get_shortcut_target(shortcut_path):
-    shell_link = pythoncom.CoCreateInstance(
-        shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
-    )
+    # Constants for the shell link interfaces
+    CLSID_ShellLink = ctypes.create_string_buffer(b"{00021401-0000-0000-C000-000000000046}")
+    IID_IShellLink = ctypes.create_string_buffer(b"{000214F9-0000-0000-C000-000000000046}")
     
-    # 访问 IPersistFile 接口以加载 .lnk 文件
+    # Create an instance of IShellLink
+    shell = ctypes.windll.shell32
+    shell_link = ctypes.pointer(ctypes.pointer(ctypes.c_void_p()))
+    if shell.CoCreateInstance(ctypes.byref(CLSID_ShellLink), None, 1, ctypes.byref(IID_IShellLink), ctypes.byref(shell_link)):
+        raise Exception("Failed to create IShellLink instance")
+    
+    # Load the shortcut file
     persist_file = shell_link.QueryInterface(pythoncom.IID_IPersistFile)
     persist_file.Load(shortcut_path)
     
-    # 获取目标路径
-    target_path, _ = shell_link.GetPath(shell.SLGP_UNCPRIORITY)
+    # Get the target path
+    target_path = ctypes.create_unicode_buffer(260)
+    shell_link.GetPath(target_path, 260, None, 0)
     
-    return target_path
+    return target_path.value
 
-# 使用示例
+# Usage example
 shortcut = r"C:\path\to\your\shortcut.lnk"
 target = get_shortcut_target(shortcut)
 print(f"Target path: {target}")
