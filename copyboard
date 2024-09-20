@@ -1,28 +1,24 @@
-import ctypes
-import os
+import re
 
-def get_shortcut_target(shortcut_path):
-    # Constants for the shell link interfaces
-    CLSID_ShellLink = ctypes.create_string_buffer(b"{00021401-0000-0000-C000-000000000046}")
-    IID_IShellLink = ctypes.create_string_buffer(b"{000214F9-0000-0000-C000-000000000046}")
-    
-    # Create an instance of IShellLink
-    shell = ctypes.windll.shell32
-    shell_link = ctypes.pointer(ctypes.pointer(ctypes.c_void_p()))
-    if shell.CoCreateInstance(ctypes.byref(CLSID_ShellLink), None, 1, ctypes.byref(IID_IShellLink), ctypes.byref(shell_link)):
-        raise Exception("Failed to create IShellLink instance")
-    
-    # Load the shortcut file
-    persist_file = shell_link.QueryInterface(pythoncom.IID_IPersistFile)
-    persist_file.Load(shortcut_path)
-    
-    # Get the target path
-    target_path = ctypes.create_unicode_buffer(260)
-    shell_link.GetPath(target_path, 260, None, 0)
-    
-    return target_path.value
+# 你的文本样例（可以从文件读取或者直接输入）
+text = """
+Management fees 16 1,634 1,919
+Custody fees 21 36
+Total investment income/(loss) 30,267 33,999
+Other income - 4
+"""
 
-# Usage example
-shortcut = r"C:\path\to\your\shortcut.lnk"
-target = get_shortcut_target(shortcut)
-print(f"Target path: {target}")
+# 正则表达式匹配管理费用、保管费用等
+pattern = r'([A-Za-z/\(\)\s]+?)\s+([-]?\d+[\d,]*)\s+([-]?\d+[\d,]*)\s*([-]?\d+[\d,]*)?'
+
+matches = re.findall(pattern, text)
+
+# 格式化输出
+results = []
+for match in matches:
+    result = [item for item in match if item]
+    results.append(result)
+
+# 输出结果
+for result in results:
+    print(result)
