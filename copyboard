@@ -1,24 +1,12 @@
-import re
+Considering the complexity of OST system API operations and to improve the efficiency of ATO preparation, this automation plan will be implemented in a semi-automated manner for now:
 
-# 你的文本样例（可以从文件读取或者直接输入）
-text = """
-Management fees 16 1,634 1,919
-Custody fees 21 36
-Total investment income/(loss) 30,267 33,999
-Other income - 4
-"""
+1. Manually edit each fund on the OST system (approximately 1 minute per fund).
+2. Use the OST API to export all relevant calculations in bulk and save them as XLSX files locally.
+3. Manually locate the necessary remote file addresses, such as DRP, DRPQ, FS, etc., and input these addresses into the designated fields in the tool (this manual process may take 10-20 minutes depending on the organization of the client’s materials).
+4. The tool parses the FS and OST calculation files, generates backups and shortcuts, and outputs any additional manual steps required.
+5. Manually input the tool's results back into OST (approximately 5 minutes).
+6. Manually add screenshots and calculation steps to the backup in the designated location (approximately 5 minutes).
 
-# 正则表达式匹配管理费用、保管费用等
-pattern = r'([A-Za-z/\(\)\s]+?)\s+([-]?\d+[\d,]*)\s+([-]?\d+[\d,]*)\s*([-]?\d+[\d,]*)?'
+Ideally, this process can reduce the time required for calculating an ITR to about 20 minutes. In the future, if full automation is considered, steps 3 and 5 can be reused without rewriting code.
 
-matches = re.findall(pattern, text)
-
-# 格式化输出
-results = []
-for match in matches:
-    result = [item for item in match if item]
-    results.append(result)
-
-# 输出结果
-for result in results:
-    print(result)
+Currently, we are in step 4, where FS PDF files are being parsed to extract financial components and their corresponding figures.
