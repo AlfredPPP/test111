@@ -1,25 +1,6 @@
-import re
 
-# 你的文本样例（可以从文件读取或者直接输入）
-text = """
-Management fees 16 1,634 1,919
-Custody fees 21 36
-Total investment income/(loss) 30,267 33,999
-Other income - 4
-Responsible Entity’s fees 16 18 26
-"""
-
-# 更新的正则表达式，匹配可能包含单引号、特殊符号的行
-pattern = r'([A-Za-z\’\'/\(\)\s]+?)\s+([-]?\d+[\d,]*)\s+([-]?\d+[\d,]*)\s*([-]?\d+[\d,]*)?'
-
-matches = re.findall(pattern, text)
-
-# 格式化输出
-results = []
-for match in matches:
-    result = [item for item in match if item]
-    results.append(result)
-
-# 输出结果
-for result in results:
-    print(result)
+	1.	The issue with capturing Early Stage Investor Tax Offset has been fixed.
+	2.	The issue where the Variance - Net Distribution Rate wouldn’t update over time has been fixed.
+	3.	AMIT and MIT funds will be inserted with the updated investment type set to “Other.”
+	4.	To be fixed: Update password input to “****.”
+	5.	To be fixed: Display text when hovering over with the mouse.
