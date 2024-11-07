@@ -1,21 +1,144 @@
-在 Python 中，可以使用内置的 xml.etree.ElementTree 模块来读取 XML 文件。以下是一个简单的例子，展示如何读取并解析 XML 文件：
+好的，下面是为 PDFParser、各个 TypePDFParser 子类以及 PDFParserFactory 类编写的 Google 风格文档。这样可以帮助后续维护人员快速理解类的设计、属性和方法的作用。
 
-import xml.etree.ElementTree as ET
+PDFParser 基础类
 
-# 解析 XML 文件
-tree = ET.parse('file.xml')
-root = tree.getroot()
+class PDFParser:
+    """Base class for parsing PDF files according to specific business rules.
 
-# 遍历 XML 的各个元素
-for element in root:
-    print(element.tag, element.attrib)  # 打印标签和属性
-    for subelement in element:
-        print(subelement.tag, subelement.text)  # 打印子标签和文本内容
+    This class provides a template for loading and parsing PDF files.
+    Derived classes should implement the `parse` method to handle
+    file-specific parsing logic.
 
-代码解释
+    Attributes:
+        file_path (str): Path to the PDF file to be parsed.
+        data (dict): Stores parsed data in a dictionary format after parsing.
+    """
 
-	1.	ET.parse('file.xml') 用于解析 XML 文件并生成一个树结构。
-	2.	tree.getroot() 获取 XML 文件的根元素，之后可以用根元素遍历整个 XML 树。
-	3.	element.tag 获取元素的标签，element.attrib 获取元素的属性，element.text 获取元素的文本内容。
+    def __init__(self, file_path):
+        """Initializes PDFParser with the specified file path.
 
-这种方法适用于较简单的 XML 文件。如果 XML 结构复杂，或者需要更高级的操作，可能需要使用 lxml 库来进行处理。
+        Args:
+            file_path (str): The path to the PDF file.
+        """
+        self.file_path = file_path
+        self.data = None
+
+    def load_file(self):
+        """Loads the PDF file content into memory.
+
+        This method should handle any necessary file I/O operations to
+        read the PDF file and prepare it for parsing.
+        """
+        pass
+
+    def parse(self):
+        """Parses the loaded PDF file.
+
+        This is a placeholder method to be implemented by subclasses. 
+        Each subclass should define the specific parsing logic based on the 
+        PDF file format and business rules.
+
+        Raises:
+            NotImplementedError: If called directly on the base class.
+        """
+        raise NotImplementedError("Subclasses should implement this method")
+
+    def to_dict(self):
+        """Formats the parsed data as a dictionary.
+
+        Returns:
+            dict: A dictionary representation of the parsed data.
+        """
+        return self.data
+
+Type1PDFParser 子类
+
+class Type1PDFParser(PDFParser):
+    """Parser for Type 1 PDF files.
+
+    This class provides parsing logic specific to Type 1 PDF format based on
+    predefined business rules. It overrides the `parse` method to extract 
+    data according to these rules.
+
+    Attributes:
+        file_path (str): Path to the PDF file to be parsed.
+        data (dict): Parsed data from the PDF file.
+    """
+
+    def parse(self):
+        """Parses the Type 1 PDF file and extracts data.
+
+        This method implements specific parsing logic for Type 1 PDF files.
+        Populates `data` attribute with structured information.
+        """
+        self.data = {
+            "example_key": "parsed_value",
+            # Custom parsing logic goes here
+        }
+
+Type2PDFParser 子类
+
+class Type2PDFParser(PDFParser):
+    """Parser for Type 2 PDF files.
+
+    This class provides parsing logic specific to Type 2 PDF format based on
+    predefined business rules. It overrides the `parse` method to extract 
+    data according to these rules.
+
+    Attributes:
+        file_path (str): Path to the PDF file to be parsed.
+        data (dict): Parsed data from the PDF file.
+    """
+
+    def parse(self):
+        """Parses the Type 2 PDF file and extracts data.
+
+        This method implements specific parsing logic for Type 2 PDF files.
+        Populates `data` attribute with structured information.
+        """
+        self.data = {
+            "another_key": "another_value",
+            # Custom parsing logic goes here
+        }
+
+PDFParserFactory 工厂类
+
+class PDFParserFactory:
+    """Factory class for creating PDFParser instances based on PDF type.
+
+    This factory provides a method to create the appropriate parser instance 
+    for a given PDF type, allowing flexible instantiation based on file format.
+
+    Methods:
+        create_parser(file_path, pdf_type): Creates and returns a parser instance.
+    """
+
+    @staticmethod
+    def create_parser(file_path, pdf_type):
+        """Creates a parser instance based on the specified PDF type.
+
+        Args:
+            file_path (str): Path to the PDF file to be parsed.
+            pdf_type (str): Type identifier for the PDF file.
+
+        Returns:
+            PDFParser: An instance of a subclass of PDFParser that can handle 
+            the specified PDF type.
+
+        Raises:
+            ValueError: If an unsupported PDF type is specified.
+        """
+        if pdf_type == "type1":
+            return Type1PDFParser(file_path)
+        elif pdf_type == "type2":
+            return Type2PDFParser(file_path)
+        else:
+            raise ValueError("Unsupported PDF type")
+
+说明
+
+	•	PDFParser 类：作为基类，定义了通用的文件加载、解析接口和输出格式化方法。
+	•	各个 TypePDFParser 子类：每个子类有独特的 parse 实现，封装了特定的 PDF 格式解析逻辑。
+	•	PDFParserFactory 工厂类：提供了创建特定解析器的静态方法，基于 pdf_type 返回相应的解析器实例。
+
+通过这些文档，代码维护人员可以更清楚每个类的设计意图、用法和属性含义，有助于后续扩展和调整。
