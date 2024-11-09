@@ -1,144 +1,82 @@
-好的，下面是为 PDFParser、各个 TypePDFParser 子类以及 PDFParserFactory 类编写的 Google 风格文档。这样可以帮助后续维护人员快速理解类的设计、属性和方法的作用。
+import json
+import sqlite3
+from typing import List, Dict
 
-PDFParser 基础类
-
-class PDFParser:
-    """Base class for parsing PDF files according to specific business rules.
-
-    This class provides a template for loading and parsing PDF files.
-    Derived classes should implement the `parse` method to handle
-    file-specific parsing logic.
+class TaskExecutor:
+    """Executes and manages a series of tasks by reading from a JSON config file, 
+    filtering completed tasks, crawling specified URLs, parsing PDFs, and storing results.
 
     Attributes:
-        file_path (str): Path to the PDF file to be parsed.
-        data (dict): Stores parsed data in a dictionary format after parsing.
+        _config_path (str): Path to the JSON configuration file.
+        _db_connection (sqlite3.Connection): Database connection object.
+        _task_list (List[Dict]): List of tasks loaded from the config file.
+        _scrapy_spider (ScrapySpider): Scrapy spider for executing crawls.
+        _pdf_parser (PDFParser): PDF parser to extract content based on regex patterns.
     """
-
-    def __init__(self, file_path):
-        """Initializes PDFParser with the specified file path.
+    
+    def __init__(self, config_path: str, db_connection: sqlite3.Connection):
+        """Initializes the TaskExecutor with config path and database connection.
 
         Args:
-            file_path (str): The path to the PDF file.
+            config_path (str): Path to the JSON configuration file.
+            db_connection (sqlite3.Connection): Active database connection.
         """
-        self.file_path = file_path
-        self.data = None
-
-    def load_file(self):
-        """Loads the PDF file content into memory.
-
-        This method should handle any necessary file I/O operations to
-        read the PDF file and prepare it for parsing.
-        """
-        pass
-
-    def parse(self):
-        """Parses the loaded PDF file.
-
-        This is a placeholder method to be implemented by subclasses. 
-        Each subclass should define the specific parsing logic based on the 
-        PDF file format and business rules.
-
-        Raises:
-            NotImplementedError: If called directly on the base class.
-        """
-        raise NotImplementedError("Subclasses should implement this method")
-
-    def to_dict(self):
-        """Formats the parsed data as a dictionary.
-
-        Returns:
-            dict: A dictionary representation of the parsed data.
-        """
-        return self.data
-
-Type1PDFParser 子类
-
-class Type1PDFParser(PDFParser):
-    """Parser for Type 1 PDF files.
-
-    This class provides parsing logic specific to Type 1 PDF format based on
-    predefined business rules. It overrides the `parse` method to extract 
-    data according to these rules.
-
-    Attributes:
-        file_path (str): Path to the PDF file to be parsed.
-        data (dict): Parsed data from the PDF file.
-    """
-
-    def parse(self):
-        """Parses the Type 1 PDF file and extracts data.
-
-        This method implements specific parsing logic for Type 1 PDF files.
-        Populates `data` attribute with structured information.
-        """
-        self.data = {
-            "example_key": "parsed_value",
-            # Custom parsing logic goes here
-        }
-
-Type2PDFParser 子类
-
-class Type2PDFParser(PDFParser):
-    """Parser for Type 2 PDF files.
-
-    This class provides parsing logic specific to Type 2 PDF format based on
-    predefined business rules. It overrides the `parse` method to extract 
-    data according to these rules.
-
-    Attributes:
-        file_path (str): Path to the PDF file to be parsed.
-        data (dict): Parsed data from the PDF file.
-    """
-
-    def parse(self):
-        """Parses the Type 2 PDF file and extracts data.
-
-        This method implements specific parsing logic for Type 2 PDF files.
-        Populates `data` attribute with structured information.
-        """
-        self.data = {
-            "another_key": "another_value",
-            # Custom parsing logic goes here
-        }
-
-PDFParserFactory 工厂类
-
-class PDFParserFactory:
-    """Factory class for creating PDFParser instances based on PDF type.
-
-    This factory provides a method to create the appropriate parser instance 
-    for a given PDF type, allowing flexible instantiation based on file format.
-
-    Methods:
-        create_parser(file_path, pdf_type): Creates and returns a parser instance.
-    """
-
-    @staticmethod
-    def create_parser(file_path, pdf_type):
-        """Creates a parser instance based on the specified PDF type.
+        self._config_path = config_path
+        self._db_connection = db_connection
+        self._task_list = []
+        self._scrapy_spider = self._initialize_spider()
+        self._pdf_parser = self._initialize_parser()
+        
+    def _load_config(self) -> None:
+        """Loads and parses the JSON configuration file, storing tasks in _task_list."""
+        with open(self._config_path, 'r') as file:
+            config_data = json.load(file)
+            self._task_list = config_data.get("tasks", [])
+    
+    def _filter_tasks(self) -> None:
+        """Filters out tasks that have already been completed based on the database records."""
+        # Database check logic to modify _task_list, removing completed tasks.
+    
+    def _update_config(self) -> None:
+        """Writes the updated list of pending tasks back to the configuration file."""
+        with open(self._config_path, 'w') as file:
+            json.dump({"tasks": self._task_list}, file)
+    
+    def execute_tasks(self) -> None:
+        """Executes each task by crawling, parsing PDFs, and storing the results."""
+        self._load_config()
+        self._filter_tasks()
+        self._update_config()
+        
+        for task in self._task_list:
+            self._run_crawl(task)
+            pdf_data = self._parse_pdfs(task)
+            self._store_results(pdf_data)
+    
+    def _run_crawl(self, task: Dict) -> None:
+        """Executes the Scrapy spider for a specific task.
 
         Args:
-            file_path (str): Path to the PDF file to be parsed.
-            pdf_type (str): Type identifier for the PDF file.
+            task (Dict): Task details for the crawling process.
+        """
+        # Code to start the Scrapy spider with task specifics.
+    
+    def _parse_pdfs(self, task: Dict) -> List[Dict]:
+        """Parses crawled PDF files based on regex patterns in the configuration.
+
+        Args:
+            task (Dict): Task with specific regex patterns for PDF parsing.
 
         Returns:
-            PDFParser: An instance of a subclass of PDFParser that can handle 
-            the specified PDF type.
-
-        Raises:
-            ValueError: If an unsupported PDF type is specified.
+            List[Dict]: Parsed data extracted from PDFs.
         """
-        if pdf_type == "type1":
-            return Type1PDFParser(file_path)
-        elif pdf_type == "type2":
-            return Type2PDFParser(file_path)
-        else:
-            raise ValueError("Unsupported PDF type")
+        # PDF parsing logic goes here
+        return parsed_data
+    
+    def _store_results(self, parsed_data: List[Dict]) -> None:
+        """Stores parsed PDF content into the database.
 
-说明
-
-	•	PDFParser 类：作为基类，定义了通用的文件加载、解析接口和输出格式化方法。
-	•	各个 TypePDFParser 子类：每个子类有独特的 parse 实现，封装了特定的 PDF 格式解析逻辑。
-	•	PDFParserFactory 工厂类：提供了创建特定解析器的静态方法，基于 pdf_type 返回相应的解析器实例。
-
-通过这些文档，代码维护人员可以更清楚每个类的设计意图、用法和属性含义，有助于后续扩展和调整。
+        Args:
+            parsed_data (List[Dict]): Parsed content to be stored.
+        """
+        # Code to store each item in parsed_data to the database.
