@@ -1,97 +1,35 @@
-Yes, Scrapy has powerful capabilities for processing data as it’s being scraped, so it could be a good option to incorporate those additional steps directly within your Scrapy pipeline. Here’s a possible approach using Scrapy’s item pipeline:
+import win32com.client
+from openpyxl import load_workbook
 
-Suggested Workflow with Scrapy
+# 使用 pywin32 打开 Excel 文件
+excel = win32com.client.Dispatch("Excel.Application")
+workbook = excel.Workbooks.Open(r"path_to_your_file.xlsm")
 
-	1.	Spider Configuration: Configure your Scrapy spider to read from the config file and retrieve URLs for PDF files or web pages.
-	2.	Item Pipeline: Set up a pipeline that will handle each step once the data is downloaded.
-	•	Filter Tasks: If your spider identifies tasks as “done” or “pending,” you could perform the filtering step within the spider itself or the item pipeline.
-	•	Save PDF to Folder: Save each downloaded PDF file to the specified folder.
-	•	Parse PDF: Use PDF parsing code within the pipeline to extract content based on the regex patterns from the config.
-	•	Database Storage: Save the parsed data to the database as the final step in the pipeline.
+# 提取宏
+if workbook.HasVBProject:
+    for vb_component in workbook.VBProject.VBComponents:
+        print(f"Macro: {vb_component.Name}")
+        print(f"Code: {vb_component.CodeModule.Lines(1, vb_component.CodeModule.CountOfLines)}")
 
-Example Structure in Scrapy
+# 提取按钮
+for sheet in workbook.Sheets:
+    for shape in sheet.Shapes:
+        if shape.Type == 8:
+            print(f"Button on {sheet.Name}: {shape.Name}")
 
-Here’s a rough outline of what this could look like in your items.py, spiders, and pipelines.py files:
+# 提取隐藏 Sheets
+hidden_sheets = [sheet.Name for sheet in workbook.Sheets if sheet.Visible == 0]
+print(f"Hidden Sheets: {hidden_sheets}")
 
-Spider (my_spider.py)
+# 使用 openpyxl 提取公式
+wb = load_workbook(r"path_to_your_file.xlsx", data_only=False)
+for sheet_name in wb.sheetnames:
+    ws = wb[sheet_name]
+    print(f"Sheet: {sheet_name}")
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value and cell.data_type == "f":
+                print(f"Cell {cell.coordinate}: {cell.value}")
 
-import scrapy
-import json
-
-class MySpider(scrapy.Spider):
-    name = "pdf_spider"
-    
-    def __init__(self, config_path, *args, **kwargs):
-        super(MySpider, self).__init__(*args, **kwargs)
-        with open(config_path) as f:
-            config = json.load(f)
-            self.task_list = config.get("tasks", [])
-
-    def start_requests(self):
-        for task in self.task_list:
-            if not task.get("completed"):
-                yield scrapy.Request(url=task["url"], meta={"task": task})
-
-    def parse(self, response):
-        task = response.meta["task"]
-        # Assuming PDF URLs are already direct links
-        pdf_url = response.url
-        yield {"pdf_url": pdf_url, "task": task}
-
-Pipeline (pipelines.py)
-
-import os
-import sqlite3
-import re
-import requests
-
-class PDFPipeline:
-    def __init__(self, config_path, db_path):
-        self.config_path = config_path
-        self.db_connection = sqlite3.connect(db_path)
-        
-    def process_item(self, item, spider):
-        # Step 1: Save PDF
-        pdf_content = requests.get(item['pdf_url']).content
-        pdf_path = os.path.join("pdf_folder", os.path.basename(item['pdf_url']))
-        with open(pdf_path, "wb") as pdf_file:
-            pdf_file.write(pdf_content)
-        
-        # Step 2: Parse PDF
-        parsed_data = self._parse_pdf(pdf_path, item['task'].get("regex"))
-
-        # Step 3: Store in Database
-        self._store_in_db(parsed_data)
-        
-        # Mark task as complete
-        item["task"]["completed"] = True
-        return item
-
-    def _parse_pdf(self, pdf_path, regex_pattern):
-        # Your PDF parsing logic, using regex_pattern to extract data
-        # Example placeholder
-        parsed_data = re.findall(regex_pattern, open(pdf_path, 'rb').read().decode('utf-8', errors='ignore'))
-        return parsed_data
-
-    def _store_in_db(self, parsed_data):
-        # Code to insert parsed_data into the database
-        pass
-
-Settings (settings.py)
-
-# Enable the pipeline
-ITEM_PIPELINES = {
-    'myproject.pipelines.PDFPipeline': 1,
-}
-
-# Pipeline configuration paths
-PDF_PIPELINE_CONFIG_PATH = 'path/to/config.json'
-PDF_PIPELINE_DB_PATH = 'path/to/database.db'
-
-Advantages of This Approach
-
-	•	Single Workflow: Scrapy handles crawling, downloading, parsing, and storing in one pipeline.
-	•	Task Management: Your pipeline can directly mark tasks as complete and handle PDF parsing immediately, reducing external processing.
-	•	Maintainability: Scrapy pipelines are modular, so it’s straightforward to adjust each step.
-
-By managing everything within Scrapy, you keep your workflow compact, with clear responsibilities divided among the spider and pipeline components. This setup is also easier to manage when updating tasks or data extraction requirements in the future.
+workbook.Close(SaveChanges=False)
+excel.Quit()
