@@ -1,35 +1,13 @@
-import win32com.client
-from openpyxl import load_workbook
-
-# 使用 pywin32 打开 Excel 文件
-excel = win32com.client.Dispatch("Excel.Application")
-workbook = excel.Workbooks.Open(r"path_to_your_file.xlsm")
-
-# 提取宏
-if workbook.HasVBProject:
-    for vb_component in workbook.VBProject.VBComponents:
-        print(f"Macro: {vb_component.Name}")
-        print(f"Code: {vb_component.CodeModule.Lines(1, vb_component.CodeModule.CountOfLines)}")
-
-# 提取按钮
 for sheet in workbook.Sheets:
+    print(f"Inspecting sheet: {sheet.Name}")
     for shape in sheet.Shapes:
-        if shape.Type == 8:
-            print(f"Button on {sheet.Name}: {shape.Name}")
-
-# 提取隐藏 Sheets
-hidden_sheets = [sheet.Name for sheet in workbook.Sheets if sheet.Visible == 0]
-print(f"Hidden Sheets: {hidden_sheets}")
-
-# 使用 openpyxl 提取公式
-wb = load_workbook(r"path_to_your_file.xlsx", data_only=False)
-for sheet_name in wb.sheetnames:
-    ws = wb[sheet_name]
-    print(f"Sheet: {sheet_name}")
-    for row in ws.iter_rows():
-        for cell in row:
-            if cell.value and cell.data_type == "f":
-                print(f"Cell {cell.coordinate}: {cell.value}")
-
-workbook.Close(SaveChanges=False)
-excel.Quit()
+        print(f"Shape Name: {shape.Name}, Type: {shape.Type}")
+        if shape.Type == 12:  # ActiveX 控件
+            print(f"Found an ActiveX Control: {shape.Name}")
+            try:
+                ole_obj = shape.OLEFormat.Object  # 获取 ActiveX 对象
+                print(f"ActiveX Control Type: {ole_obj.progID}")
+                if ole_obj.progID == "Forms.CommandButton.1":  # 检查是否是按钮
+                    print(f"Button Caption: {ole_obj.Caption}")
+            except Exception as e:
+                print(f"Error accessing ActiveX control: {e}")
