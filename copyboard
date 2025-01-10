@@ -1,151 +1,145 @@
-BSD（业务规格说明）报告
+下面是一份面向金融月度税务（MTP）场景的差异展示与交互界面（UI/UX）设计思路，旨在让用户在Summary 和 Detail 两个层面都能高效、友好地查看、编辑、回溯和解释差异原因。此设计基于PySide2 或其他常规前端框架（例如 Web/桌面混合方案）均可实现，思路要点如下：
 
-	下文是一份基于现有 mtp.py 脚本和辅助 Excel（Fund Calculate.xlsx 等）所体现业务逻辑与功能的业务规格说明（BSD）示例。由于目标是重构该脚本，去除原有 VBS+Excel 宏混合开发方式，改为 Python + PySide2 + SQLite 的新框架，因此本报告会在介绍业务需求和原功能的基础上，给出新的功能模块划分与接口说明，供后续开发和扩展使用。
+一、整体设计思路概览
+	1.	Summary Page：以checkpoint 为维度列出差异概览
+	•	采用「主列表 + 右侧/底部 详情面板」或「点击跳转到 Detail Tab」的方式展示。
+	•	每行仅显示关键信息：
+	•	Checkpoint 名称 / 差异数量 / 状态（已评论、待评论、或 <sendback>）等
+	•	允许添加简单的全局备注（Notes）。
+	2.	Detail Page：深度查看并编辑某个 checkpoint 的各行差异
+	•	支持分段式或分组式 展示多条业务字段、差异值和相关信息。
+	•	借鉴「大厂」通用设计（如阿里云、Azure Portal、Salesforce 后台等）——在核心数据列表上提供「可折叠 / 弹出」查看计算逻辑、历史记录和评论的功能。
+	3.	计算逻辑溯源
+	•	在每个差异行或字段旁，提供**“展开详细”** 的入口，以便查看数据来源链（Source file / 计算公式 / 内部系统取值等）。
+	•	避免把所有信息挤进「表格单元格」里，转而使用可展开 Panel、Tooltip 或 弹窗 (Modal) 方式，来保持主表格的简洁。
+	4.	可视化差异
+	•	避免单纯“Excel 样式”表格的冗长、单元格边框林立，转而使用分栏或卡片式区块来突出重点。
+	•	对数值差异可使用颜色标记、箭头或增减标识，快速对比 Internal Value 与 Source Value。
+	5.	评论与 Sendback 机制
+	•	在 Detail 界面里，每行差异或字段下都能插入 Preparer/Reviewer 的评论对话。
+	•	采用**“会话”或“Timeline”**风格（类似 GitHub 代码评注或 Google Docs 评论），便于追溯历史评论与 <sendback> 标签。
+	6.	适配金融背景
+	•	大部分金融数据较多：或为货币值、百分比、表格。
+	•	注意数字格式化（千分位、负数用括号标识、显示精度等）；提供导出功能。
+	•	对敏感数值或重大差异（如超阈值）提供颜色或图标醒目提示。
 
-1. 引言（Introduction）
+二、Summary Page 设计建议
 
-1.1 背景
-	•	每月税务计提（Monthly Tax Provision，MTP）：基金或资产管理公司需在每月或季度末，对不同基金的应税收入、扣除项、资本利得、投资收益等数据做出统计、调整并计算当期 Tax Provision。
-	•	业务协作角色：
-	•	Preparer：主要负责基础数据收集和财务规则计算，包括可能的手工修正（adjustment）。
-	•	Reviewer：审阅 Preparer 的结果，确认是否符合监管、财务政策及客户方的特殊需求。
-	•	系统目标：以自动对比平台中已提交的 Tax Provision 数据与用户提供的原始文件数据，并输出差异报告，同时容许 Preparer/Reviewer 就每条差异填写 comment，方便后续追溯与审计。
-	•	重构动机：当前脚本由 Python + VBA + Excel 宏混合实现，耦合度高且调试不便；为提升维护性和扩展性，拟将技术栈转向 Python + PySide2（UI） + SQLite（数据库），同时保持和扩展既有功能。
+2.1 概要列表视图 + 右侧详情面板
+	•	左侧：Checkpoint 列表
+	•	以行或卡片形式列出：
+	•	Checkpoint 名（如 “S4 Dividend IP Recon”）
+	•	差异数量 & 差异类型概览
+	•	当前处理状态（已评论、待评论、sendback 等）
+	•	右侧：高阶概览或备注
+	•	当用户点击某个 checkpoint 时，右侧面板可显示更多信息：例如最后一次提交时间、总评论数、Preparer vs. Reviewer 状态等
+	•	或者提供「Go to Detail」按钮，跳转到 Detail Tab。
+	•	顶部：可有Notes输入框或工具栏
+	•	用于记录此核查对象整体的备注，或导出 / 刷新操作。
 
-1.2 读者范围
-	•	本文档主要面向项目实施人员、开发人员和测试团队，帮助其理解此项目的业务需求、功能范围以及技术要点。
+	优点：减少过度跳转，用户能在同一个窗口快速切换不同 checkpoint 的高阶信息；也可随时进入更详细的 Detail。
 
-2. 业务需求（Business Requirements）
+2.2 另一种：简单列表 + Tab 跳转
+	•	Summary 只做简洁列表：点击后跳转到 Detail Tab。
+	•	在大屏或 多标签界面 下也很直观。
 
-2.1 核心需求概述
-	1.	数据整合与对比
-	•	系统应加载来自网络平台上下载的月度税务计算报告（MTP），同时汇入多份用户在 Excel、PDF、CSV 等原始文件中提供的数据。
-	•	对应各基金、各科目、各类型收入与费用及资本利得/损失进行匹配比对；如有差异，应在报告中列出。
-	2.	差异处理与评论（Comments）
-	•	若系统发现差异，则在差异清单中列出并让用户（Preparer 或 Reviewer）填写评论（说明差异原因或调整理由）。
-	•	评论的记录应能够保存并与后续版本的 MTP 对比相衔接。
-	3.	用户角色与权限
-	•	Preparer：可上传或录入数据，对差异添加或修改评论；可进行手动调整操作；可再次运行检查脚本。
-	•	Reviewer：可查看差异与 Preparer 的评论，提出进一步的审阅评论，决定差异是否可被接受或需要进一步修改。
-	4.	自动化处理
-	•	对特定类型的检查项，如 SWAP 文件、Investment Package 文件、Income Package 文件、NAV 等，系统应能够通过配置或脚本自动匹配其位置与关键字段，并将数据抓取至数据库中进行对比。
-	•	对缺失或不匹配的文件、sheet、行或列等情况能给出提示或警告。
-	5.	输出报告与查看
-	•	系统应能输出一份合并汇总报告，用于查看各基金在各科目下的最终MTP数值、与原始文件计算的数值、差异值及评语。
-	•	提供友好的 UI 界面（PySide2）以便多角色协同操作。
+三、Detail Page 设计建议
 
-2.2 数据需求与存储
-	1.	输入数据：
-	•	来自网络平台导出的 MTP 报告文件（如 XLSX/CSV 等）。
-	•	各类原始文件（收入、分红、资本利得/损失、SWAP、Pre TOFA、Tender Offer、PY MTP、PM MTP 等）。
-	•	用户在差异表格上的手工评论与调整。
-	2.	存储方式：
-	•	使用 SQLite 替代当前的文本或 Excel 辅助储存。
-	•	保存的信息包括：
-	•	MTP 原始数据（按基金、科目/行项目、金额等）。
-	•	原始文件数值（相同颗粒度下的基金、科目/行项目、金额等）。
-	•	差异与评论（差异值、评论文本、评论时间、评论人、用户角色等）。
-	•	Checkpoint 配置（各检查项对应该如何匹配行列、对应的 alias 规则等）。
+3.1 分栏布局（左右双栏）或上下布局
+	1.	左侧/上方：差异数据表格
+	•	展示该 checkpoint 所有行/字段的差异：
+	•	字段名称、Internal Value、Source Value、Manual ADJ、差异、状态
+	•	样式参考「GitHub 代码 diff」或「Excel + 强化样式」：
+	•	直接显示差异处的突出颜色（如红色/绿色），同一行可用对比方式并列。
+	•	也可在差异行左侧放一个Expand 按钮。
+	2.	右侧/下方：展开详情
+	•	当用户点击某条差异，右侧/下方出现一个Detail Panel：
+	•	显示具体计算链（e.g. “此值来源于 TIR 文件第 XX 行 + SWAP 文件第 XX 行 …”，或者内网 MTP Report ID …）。
+	•	显示评论列表（Preparer / Reviewer / timestamp / <sendback>）。
+	•	用户可在此处输入新的 comment，或查看历史评论对话。
+	•	或者也可用一个弹出层（Modal / Drawer）来呈现，点“查看计算逻辑”后再出现细节数据。
 
-2.3 UI 需求
-	1.	文件上传/选择
-	•	Preparer 登录后，可在 PySide2 界面选择/上传各源文件或配置路径（对应原来的输入 Excel 或路径）
-	•	一旦文件加载成功，系统自动扫描并提取关键数值，存进数据库。
-	2.	差异展示
-	•	在 UI 中以列表/表格形式显示差异条目：包括基金、项目名称、MTP 数值、原始文件数值、差异、状态、评论等。
-	3.	评论功能
-	•	Preparer/Reviewer 均可对差异添加评论。Reviewer 能查看并追加意见，或标记差异状态。
+	优点：
+		•	让「主体表格」以简洁对比为主，不塞太多杂乱信息；
+	•	用户在一眼能看到所有行差异，点击才显示“计算逻辑、来源、评论”的附加信息。
 
-3. 功能模块（重新设计）
+3.2 树形/分组式结构
+	•	若某个 checkpoint 包含很多业务字段并有层级关系（如同一类别或同一投资品种），可按层级或分组来展开：
+	•	Example:
 
-下文基于原 mtp.py 中的各函数和类，结合业务逻辑，给出更合理的功能拆分与命名示例。此拆分已考虑采用 PySide2 进行界面开发、SQLite 进行存储，以及后续扩展的可维护性。
++ Income
+  - Domestic
+     * Realised Gains
+     * Unrealised Gains
+  - Foreign
+     * Realised Gains
+     * Unrealised Gains
++ Dividend 
+  - Domestic 
+  - Foreign
+...
 
-3.1 数据读取模块（Data Ingestion Layer）
 
-新类/函数	主要职责	对应旧代码/备注
-FileCollector	搜集用户指定的文件（MTP、SWAP、Income Package、Tender Offer、Pre TOFA 等），解析路径和名称。	原脚本中 source_ck() 函数及其相关的文件匹配逻辑；Excel 中对 p_pmpth/p_pypth/p_cmpth/... 的解析。
-ExcelParser	解析 Excel 中的各 sheet（可根据配置/alias 来定位行列），将目标数值写入 SQLite。	原脚本中 open_source(), epdf(), alia_m(), ck_swap(), downld_mtp() 等与 Excel 打开和处理文件相关的功能。
-PDFParser（可选）	解析 PDF 中的关键字段(若需要）	部分与 epdf() 函数逻辑对应
-DatabaseManager	统一封装对 SQLite 的查询和写操作	原脚本使用文本方式或另写函数存储数据。现改用 SQLite。
+	•	这样更贴合「数据逻辑」；在展开节点时可看到明细差异与评论区。
 
-3.2 比对与差异处理模块（Comparison & Validation Layer）
+3.3 计算逻辑显示方式
+	1.	Tooltips：当鼠标悬停在某行/列时，弹出计算公式或数据链文字摘要。
+	2.	“查看详情”按钮：点击后在侧边或对话框内显示更完整的“来源文件路径、单元格/行号、计算公式”等。
+	3.	可编辑：在 S4 Dividend IP Recon 等特殊场景下，Detail Row 里可能需要一个input或编辑按钮，用于更新内部系统数值后再触发保存/提交。
 
-新类/函数	主要职责	对应旧代码/备注
-DataComparer	核心比对逻辑：将数据库中 MTP 值对比原始文件值，计算差异并记录在差异表中。	对应 run() 中有关差异计算、match2(), match_s5u(), ck_manual_adj() 等部分功能。
-CommentManager	处理差异评论（写、读、更新），并存储在 SQLite 中。	对应 upload_cmt(), savprivate(), submit() 等对差异评论的保存与提交逻辑。
-CheckPointManager	维护检查点（checkpoint）的配置和启用/禁用等逻辑。	对应 refresh_assign(), parse_role(), ck_able(), select_all() 等功能。
+四、如何兼顾信息量大与界面整洁
+	1.	信息抽层：
+	•	主表格：仅保留 5~6 个核心列（如 Field、Internal Value、Source Value、ADJ、Difference、Status）。
+	•	展开/弹出：放详细计算过程、引用文件路径、评论对话等。
+	•	此“抽层”设计能避免把过多文本挤在同一单元格里。
+	2.	灵活的列显示/隐藏：
+	•	给用户提供“显示更多列”或“只看差异列”功能，便于在复杂场景中自定义视图。
+	3.	快速筛选/搜索：
+	•	如果差异行数量很大，则在列表顶部提供过滤（Filter）或关键字搜索，让用户聚焦某些字段（例如只看差异 > 1000 的行，或只看 <sendback> 行）。
+	4.	批量评论/标记：
+	•	用户可一次性对某些类似差异打相同 comment，并在界面上批量操作；这对重复性的金融数据会很方便。
 
-3.3 用户交互与流程控制模块（UI & Workflow Layer）
+五、User Friendly 细节
+	1.	可折叠的侧边栏
+	•	方便在有限的窗口中（如笔记本）同时查看差异列表与详细评论。
+	2.	全局导航
+	•	保持主界面 / Summary / Detail / Checklist 等 Tab 的统一导航，用户随时能回到上一级页面查看其他 checkpoint。
+	3.	高亮差异 / 标记优先级
+	•	对差异超过阈值的行，可在左侧带红色警示或带感叹号图标。
+	4.	导出：
+	•	在 Detail 里支持导出 CSV / Excel。若用户需要完整的计算链，可用 “导出包含计算过程/评论的 PDF”。
+	5.	小组件：合计/小计
+	•	金融数据常需要合计或小计栏；可在表尾/表头展示合计或自动统计信息，让用户直接看到合并数值，也能对比差异之和。
 
-新类/函数	主要职责	对应旧代码/备注
-MainWindow (PySide2)	提供主界面：包括文件上传、表格查看差异、切换角色、查看/添加评论等操作。	原来 Excel 里 Home sheet/Login sheet 中的一些按钮功能 OnClick()。
-LoginDialog (PySide2)	用户登录界面：输入账号（Preparer/Reviewer）及密码，控制角色权限。	对应 class cofig_act()，以及脚本中对 log_rol.Value 的处理逻辑。
-ReviewDialog (PySide2)	展示已上传的 MTP 数据及评论，Reviewer 可进行评论或确认操作。	原脚本 reviewer 相关函数：rev_copy() 等。
-PreparerWorkflow	处理 Preparer 角色常用操作逻辑，如“加载文件”、“保存/提交评论”、“重新比对”。	对应 class exe(), class submit(), ld_ldr.OnClick() 等部分。
-ReviewerWorkflow	处理 Reviewer 角色常用操作：如“加载并查看差异”、“追加评论”、“导出审核报告”等。	对应 submit(), rev_copy(), ld_cmt() 部分。
+六、对比常见大厂成熟设计
+	1.	GitHub Pull Requests / Code Review
+	•	核心思路：在核心文件变化处展示差异；点击行展开评论对话。
+	•	可借鉴行内评论与历史记录追溯。
+	2.	阿里云控制台 / AWS Console
+	•	强调卡片式或分区式 UI，不将过多信息一次性堆在表格，常使用“展开折叠” / “配置化列”的模式。
+	3.	SAP / Salesforce 后台
+	•	复杂财务/客户数据管理时，会对关键字段聚焦显示，对不常用信息隐藏或折叠，评论则类似 “Note” / “Activity History” 的时间轴。
 
-3.4 日志与错误处理模块（Logging & Error Handling）
-	•	统一使用 Python logging 库捕获关键错误，或提示用户处理异常（例如文件未找到、网络超时、Excel 行列匹配不到等）。
-	•	对应旧脚本 try-except 大量散落在函数内部；新架构应集中管理异常处理，给予适当的 UI 提示。
+七、满足项目需求与技术实现
+	•	金融背景
+	•	注意数值格式、业务字段多，采用折叠/展开与分组方式可更好承载。
+	•	对高额或异常差异及时视觉提示。
+	•	技术框架
+	•	PySide2 允许用QTreeView / QTableView 结合QStyledItemDelegate 自定义差异高亮。
+	•	评论与详情可采用QDockWidget、QSplitter 或QDialog 实现。
+	•	User Friendly 目标
+	•	用「渐进式披露（Progressive Disclosure）」减少初始界面冗余；
+	•	尽量少页面跳转，大部分操作可以在同一主窗口的不同区域完成。
+	•	更多可涵盖的要点
+	1.	国际化（如果需要多语言切换，PySide2 也能提供翻译支持）
+	2.	权限控制（Reviewer vs. Preparer，是否可编辑 certain fields）
+	3.	可自定义阈值（如差异在 ±1 以内自动标记为 pass）
+	4.	历史版本比对（对同一行在不同时点/用户的修改，保留类似“变更日志”）
 
-4. 核心业务流程（示例）
-	1.	Preparer 登录
-	•	UI 显示“上传路径/文件选择” → Preparer 选择 MTP 报告与各原始文件 → 系统自动解析并写入 SQLite → 触发 DataComparer 进行比对。
-	•	若存在差异 → UI 显示差异清单 → Preparer 填写评论并保存。
-	2.	Reviewer 登录
-	•	查看 Preparer 处理后的数据及评论 → 进一步补充或质疑评论 → 选择是否确认该差异。
-	•	可选择导出最终核对结果（供外部审计或归档）。
+八、总结
+	•	将差异主信息（Internal vs. Source vs. ADJ vs. Difference）直观对比放在列表中心，使用色块/图标来提示增减。
+	•	将计算逻辑、来源文件路径、评论等额外信息通过可展开/可弹窗的方式呈现，而不是堆在表格单元格里。
+	•	在 Detail 界面，可通过左右分栏/上下分区或 Drawer/Modal，让用户在查看核心数据的同时，也能快速切换到评论和数据来源。
+	•	保留导出/打印/批量操作等常见功能，以满足金融场景下的合规或归档要求。
 
-5. 技术架构与实现要点（High-Level Technical Approach）
-
-5.1 新的框架示意
-
-[ PySide2 UI ] 
-       |            
-       v
-[ Controller / Workflow Layer ]
-       |
-       v
-[ Comparison & Validation Layer ]
-       |
-       v
-[ Data Ingestion Layer ]  ---> [ SQLite Database ]
-       |
-       +---> File System (Excel, PDF, CSV)
-       |
-       +---> MTP Web Platform (API / Download)
-
-5.2 关键实施细节
-	1.	去 Excel 宏：所有与按钮、事件相关的点击逻辑改由 PySide2 的信号/槽函数管理；Excel 打开仅作数据源读取，不再保存宏。
-	2.	去 VBS：脚本中大量对 Excel/VBA 的调用改为 Python 库（如 openpyxl 或 xlrd/xlwt/xlsxwriter）或专门的 PDF 库来解析原始文件。
-	3.	SQLite 数据表设计：
-	•	mtp_data：存储来自 Web 平台的 MTP 行项
-	•	source_data：存储从原始文件提取的数值
-	•	differences：存储差异（基金、科目、MTP 值、source 值、variance、状态等）
-	•	comments：差异评论（差异ID、评论者、用户角色、评论文本、时间戳等）
-	•	checkpoints：各检查点配置/alias
-	4.	并发控制：若多用户并发编辑评论，可在 SQLite 层使用行级/事务锁或在上层进行锁机制或“最后编辑”时间戳判断。
-	5.	灵活拓展：可在后续添加新的报表类型或新的资金/资产类型处理逻辑，只需在 Data Ingestion Layer 做适配或在 Comparison 层定义新的比对规则。
-
-6. 安全与权限
-	•	访问控制：Preparer/Reviewer 角色区分；若日后需要更细颗粒度权限可引入 RBAC（基于角色的访问控制）策略。
-	•	数据安全：SQLite 数据库应定期备份，并可考虑数据加密（根据企业合规需求）。
-
-7. 交付与里程碑
-	1.	第一阶段：完成现有功能的迁移与测试（剥离 VBS/Excel 宏、替换为 PySide2 + SQLite）；与 Preparer、Reviewer 用户一起确认核心功能是否可用。
-	2.	第二阶段：根据实际需求进行扩展，如多语言支持、自动发送审阅结果、对接更多外部系统等。
-
-8. 附录
-	•	参考表格/Sheet 映射：详见本报告附录的各“mm4”“mm5”“ckalia”“pdfalia”等。
-	•	Alias 与关键字配置：详见原 ckalia、alias 区域说明。
-	•	术语解释：
-	•	“TOFA” 指 Taxation of Financial Arrangements，澳大利亚税法相关概念。
-	•	“Pre TOFA / Post TOFA” 即基于不同日期的税务安排处理方式。
-	•	“SWAP” 指掉期交易相关文件。
-	•	“Tender Offer” 指投标要约文件或类似资金操作。
-	•	“MTP” 指 Monthly Tax Provision 报告。
-
-结束语
-
-以上 BSD 报告简要勾勒了本项目所有必须满足的业务需求和功能要点，并对旧代码各部分功能在新架构中的位置与命名作出示例性安排。
-后续若有补充或调整，可在此文档基础上增补更详细的业务规则、数据表结构、接口定义以及测试方案等。通过该重构，项目可摆脱对 Excel VBA 的过度依赖，提升稳定性和可维护性，满足税务计提业务不断迭代发展的需求。
+此设计思路能在保留「类似 Excel」对比效率的同时，进一步优化 UI 的美观度与易用性，并兼顾了项目的大数据量、审核评论、金融格式以及技术可行性等多重需求。
