@@ -1,286 +1,32 @@
-下面是一份 产品需求文档（PRD） 的示例，基于以下来源和要求编写：
-	1.	你所给出的 “完善后的 2. 业务需求” 内容（必须全部实现）。
-	2.	参考 CS480 Software Requirements Specification 等需求文档的写作结构。
-	3.	融合了我们对 UI 设计（Summary / Detail / 计算逻辑追溯等）的讨论，以及对 Python 代码与 Excel 模板 的了解。
-	4.	保证一个开发工程师看完后，能直接着手进行此项目的开发，无重大疑问。
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
-在文档完成后，我们会进行自检，确保所有“2.业务需求”章节的点都得到落实，并且功能模块分配、接口、实现思路都足够清晰。
+# 创建一个 Session 对象来管理请求
+session = requests.Session()
 
-产品需求文档 (PRD)
+# 设置 User-Agent，模仿 Scrapy 的默认行为
+session.headers.update({
+    "User-Agent": "Scrapy/2.9.0 (+https://scrapy.org)"
+})
 
-1. 引言（Introduction）
+# 自动处理重定向和重试策略
+retry_strategy = Retry(
+    total=3,  # 重试次数
+    backoff_factor=0.3,  # 每次重试间隔时间的倍数
+    status_forcelist=[429, 500, 502, 503, 504],  # 遇到这些状态码会重试
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
-1.1 文档目的（Purpose）
+# 访问目标网站
+url = "https://example.com"  # 替换为你的目标网站地址
+response = session.get(url)
 
-本文档旨在明确Monthly Tax Provision（MTP）核查系统的需求和设计。系统用于对内部系统下载的 MTP 报表数据与用户提供的原始文件（如 TIR、SWAP、Investment Package、NAV、PDF 等）进行多维度对比，并生成差异报告。最终帮助 Preparer 和 Reviewer 高效地进行数据校验、差异评论、Checklist 签名、并满足金融行业的合规需求。
-
-1.2 范围（Scope）
-	•	主要功能：
-	1.	从内部系统下载 MTP 文件
-	2.	读取本地/网络 Excel、PDF 等原始文件并解析
-	3.	按照预设业务规则（checkpoints）多维度对比
-	4.	生成 Summary/Detail 差异报告
-	5.	允许评论、sendback、可回写（部分Checkpoint）
-	6.	提供多用户角色（Preparer, 1st Reviewer, 2nd Reviewer）
-	7.	保存历史记录、Checklist 签名与导出
-	8.	在 UI 界面中灵活展示及编辑差异
-	•	不在范围内：
-	•	本文档不讨论具体的网络安全或企业级 SSO 登录策略（可复用企业已有）；
-	•	不包括外部金融计算公式本身的正确性，仅对比 内部系统 vs. 原始文件 之差异。
-
-1.3 目标读者（Intended Audience）
-	1.	项目开发工程师：需要在阅读后明确系统要做什么、如何做。
-	2.	业务人员（Preparer / Reviewer）：可从中了解功能流程及预期。
-	3.	管理层 / 审计人员：可审阅此文档以保证需求合规性。
-
-1.4 参考资料（References）
-	•	CS480 Software Requirements Specification
-	•	你给出的 Python 脚本 (mtp.py) 与 Fund Calculate.xlsx 模板
-	•	之前整理的**完善版“2.业务需求”**内容
-
-2. 业务需求总览（Overall Description）
-
-	（本章节严格包含了“完善后的 2.业务需求”中的各要点，并根据 PRD 结构适当组合。）
-
-2.1 核心需求概述
-	1.	术语说明
-	•	核查对象：由 “Fund code + As of date” 唯一标识，本系统任何对比/更新操作都基于此对象进行。
-	•	时间缩写：CM、PM、CY、PY 等
-	•	Preparer/Reviewer：不同权限角色
-	•	ADJ（Adjustment）：人工手动调整值
-	•	Checkpoint：特定业务规则检查点，如 S4 Dividend IP Recon、S5 Unbalance Fund
-	•	内部系统：如 MYRTS、DMH，需要登陆才能下载 MTP
-	2.	数据整合与对比
-	•	下载 MTP 报表文件：系统可调用内部接口 or 模拟登录，拉取 “Fund code + As of date” 的 MTP 文件（CM/PM等版本）
-	•	读取原始文件：用户在 UI 上输入或选择 Excel、PDF、CSV、TIR、SWAP 等文件路径，系统解析出对应值
-	•	多维度对比：对每个 Checkpoint 按业务规则比对“内部系统值 vs. 原始文件值 vs. manual ADJ”，生成差异列表
-	3.	差异处理与评论
-	•	Summary Page：汇总各 checkpoint 的差异概览；可添加全局 Notes
-	•	Detail Page：显示某 checkpoint 下的明细差异；可添加行级评论（comment）、或 <sendback> 标记
-	•	Reviewer：若不认同某行差异或 ADJ，可 <sendback>
-	4.	上传文件至内部系统
-	•	在 S4 Dividend IP Recon 等特定 checkpoint，可修改 MTP 值后更新回内部系统
-	5.	Checklist 文件签名
-	•	在程序Checklist Tab 界面中，Preparer/1st Reviewer/2nd Reviewer 各自签名
-	•	可点击 “Save” 或 “Export” 把签名信息存入数据库和文件
-	6.	多用户与数据存储
-	•	多用户可并行登录处理不同基金对象
-	•	同一基金对象同时只能被一人编辑
-	•	差异与评论存入数据库（SQLite），下次打开可恢复
-	7.	自动化处理
-	•	可导出差异报告
-	•	文件/行/列等缺失时有警告
-	•	PySide2 提供友好 UI
-	8.	历史差异统计
-	•	可在主界面查看各核查对象历史差异、各用户易错点
-
-2.2 数据存储需求
-	1.	本地储存
-	•	内部系统密码（加密可选）
-	•	“运行规则” 表（checkpoint/解析规则），从局域网同步
-	2.	局域网储存：运行记录（SQLite）
-	•	表：run_records，包含 fund_code, as_of_date, checkpoint, internal_value, source_value, preparer_comment, reviewer_comment, update_time, update_user, is_valid 等
-	•	当添加 notes 时一些字段可为空
-	3.	局域网储存：运行规则（SQLite）
-	•	表：run_rules，包含 checkpoint, file_type, rule_pattern, comment, update_time, update_user, is_valid
-	4.	局域网储存：Checklist 文件
-	•	Checklist 记录表：checklist_records，包含 ID, fund_code, as_of_date, file_path, md5, update_time, update_user
-
-2.3 UI需求
-	1.	登录界面
-	•	角色选择（Preparer / 1st / 2nd Reviewer）+ 内部系统 + 账号密码；记住密码；或 skip 游览
-	2.	程序主界面 - Home
-	•	历史核查对象与差异统计、用户失误统计
-	3.	程序主界面 - Review Tab
-	•	选择 Fund code + As of date + checkpoints
-	•	用户输入原始文件路径
-	•	执行对比；显示 Summary；可添加 notes；可导出
-	4.	程序主界面 - Detail Tab
-	•	某 checkpoint 下的明细行差异：内部值、原始值、manual ADJ、差异、评论
-	•	若是 S4 Dividend IP Recon，允许编辑并更新回内部系统
-	5.	程序主界面 - Checklist Tab
-	•	显示 checklist.xlsx 模板
-	•	各项双击标记已检查，并在姓名/日期栏签名
-	•	可保存并导出
-
-3. 系统特性与功能需求（System Features & Requirements）
-
-为便于后续开发，本节将系统拆分为功能模块，结合代码逻辑与 UI 设计，详细说明。
-
-3.1 登录与 Session 管理
-	•	目标：让 Preparer/Reviewer 登录内部系统并获取对应权限
-	•	功能点：
-	1.	用户输入账号密码，角色类型
-	2.	调用内部系统或使用requests模块进行登录，获取 session cookie
-	3.	成功后跳转主界面；失败提示错误
-	4.	记住密码（可用本地加密存储）
-	5.	skip 按钮仅允许只读/查看历史，不可编辑
-	•	UI/交互：
-	•	LoginWindow，包含文本框 + role 下拉 + “记住密码”checkbox + “skip”按钮
-
-3.2 MTP 下载与原始文件解析
-	•	目标：下载内部系统 MTP 文件 & 解析本地原始文件
-	•	功能点：
-	1.	MTPDownloader：根据 fund_code + as_of_date 调用内部接口 / URL 进行下载；若用户已登录可直接请求
-	2.	FileParser：可针对 Excel、PDF、TIR/Swap CSV 等进行解析
-	•	读取相应 sheet / page / row / col，匹配关键字或使用 regex 提取需要的数值
-	•	结合 run_rules 的 pattern，自动对齐 checkpoint
-	•	UI/交互：
-	•	在 Review Tab 选中 checkpoint 时，系统提示需哪些文件路径，用户在对话框中指定
-	•	解析进度条提示
-
-3.3 对比与差异生成（Checkpoints Checking）
-	•	目标：将内部系统与解析后的原始文件数据逐项比对，计算差异
-	•	功能点：
-	1.	Checker：核心 compare_values(internal_val, source_val, manual_adj) => difference
-	2.	遵循 run_rules 中配置的对比规则
-	3.	生成 Summary（各 checkpoint 差异数、状态）和 Detail（逐字段差异）
-	•	UI/交互：
-	•	在Review Tab点击 “Review” 后，后台进行对比
-	•	生成Summary Page：显示 checkpoint 列表、差异统计、状态
-	•	用户点某 checkpoint => 进入Detail 查看明细
-
-3.4 差异处理与评论
-	•	目标：让 Preparer/Reviewer 针对差异进行评论和 <sendback>
-	•	功能点：
-	1.	在Detail 中，每行都可写 Preparer comment；Reviewer 也可写 1st / 2nd reviewer comment
-	2.	<sendback>：在评论中增加此标记，使得 Preparer 需要再次修改或解释
-	3.	Notes（Summary 级别）的填写
-	4.	数据都存储在 run_records 表中
-	•	UI/交互：
-	•	Detail 界面：列表 + 右侧/下方/弹窗的评论区，或点击一行 => 展开评论对话
-	•	同时可查看数据来源或计算逻辑（如 tooltip / expand panel）
-
-3.5 S4 Dividend IP Recon 可写回
-	•	目标：支持在此 checkpoint 下，修改内部系统中的 MTP 值
-	•	功能点：
-	1.	读取已下载的 MTP 数据
-	2.	允许在界面上编辑特定字段
-	3.	更新回内部系统（需 session 有权限）
-	4.	记录操作日志
-	•	UI/交互：
-	•	Detail 表格中有可编辑单元格 + “提交更新”按钮
-	•	提交成功后刷新差异
-
-3.6 Checklist 文件签名
-	•	目标：收集 Preparer/Reviewer 在 Checklist 表中的签名或勾选，并导出
-	•	功能点：
-	1.	UI 展示 Checklist 内容（加载自模板或数据库）
-	2.	用户双击签名栏 => 自动填充用户名和日期
-	3.	“Save” => 存入 checklist_records 表 并更新/生成 xlsx
-	4.	“Export” => 导出本地一份
-	•	UI/交互：
-	•	ChecklistTab：表格样式；自动保护或限制编辑部分单元格
-	•	可合并对 Reviewer 1 & 2 的签名区域
-
-3.7 历史数据与统计
-	•	目标：提供对过去记录的查询与错误统计
-	•	功能点：
-	1.	HomeTab 显示所有 fund_code + as_of_date 的历史差异统计
-	2.	统计“某用户最常出现 sendback”的 checkpoint
-	3.	导出统计报表
-	•	UI/交互：
-	•	在 HomeTab 中可下拉选择基金或日期范围
-	•	查看统计结果
-
-4. 外部接口与交互（External Interface Requirements）
-	1.	用户接口（User Interfaces）
-	•	PySide2 框架：
-	•	主窗口包含 Tab：Home / Review / Detail / Checklist
-	•	LoginWindow 弹窗或单独对话框
-	2.	软件接口（Software Interfaces）
-	•	内部系统：登录接口 + 文件下载 API (HTTPS)
-	•	SQLite：run_records / run_rules / checklist_records 等
-	3.	通信接口（Communication Interfaces）
-	•	HTTP/HTTPS 请求至内部系统；
-	•	本地文件 I/O (Excel, PDF, CSV 等)
-	4.	硬件接口（Hardware Interfaces）
-	•	一般 PC 端即可，不做特殊要求
-
-5. 非功能需求（Non-Functional Requirements）
-
-5.1 性能（Performance Requirements）
-	•	通常对比数据量在几百至几千行内，Python + SQLite 可满足 3~5 秒内完成
-	•	大文件 PDF 或 Excel 需优化解析逻辑，异步或多线程
-
-5.2 安全性（Security Requirements）
-	•	密码可加密存储
-	•	在发送请求到内部系统时必须使用 HTTPS
-	•	不在本地明文保存敏感 MTP 报表，若需则加密存放
-
-5.3 可维护性（Maintainability）
-	•	代码按模块分层：SessionManager / MTPDownloader / FileParser / Checker / CommentsManager / UI
-	•	通过 run_rules 实现对 checkpoint 规则的配置化，利于后续新增
-
-5.4 可扩展性（Extendability）
-	•	未来若有新的文件类型（XML, JSON）或新的 checkpoint，只需扩展 FileParser / Checker
-	•	新增 UI 界面 Tab 亦相对简单
-
-5.5 易用性（Usability）
-	•	根据金融背景，数值格式化，提供Tooltips / 计算链展开
-	•	UI 界面保留「Excel-like」的直观操作
-
-6. UI & 交互设计概要（结合差异展示方案）
-	1.	Summary Page：以 checkpoint 维度展示差异总览
-	•	列表 + 右侧面板 / 或双击跳转Detail
-	•	允许添加全局 Notes
-	2.	Detail Page：
-	•	差异列表：字段名称、内部值、原始值、ADJ、差异、评论标记
-	•	展开计算逻辑：点击「展开/更多」查看具体文件来源、公式或 row/col
-	•	评论交互：类似 GitHub 行内评论
-	•	S4 Dividend IP Recon：可编辑 MTP 值
-	3.	Checklist Page：
-	•	显示 checklist 各项
-	•	双击签名、保存/导出
-
-此设计对应之前的UI 方案，确保兼顾信息量与界面整洁，并满足项目需求。
-
-7. 里程碑与交付 (Milestones & Deliverables)
-	1.	第一阶段：基础框架 + 登录功能 + UI 原型
-	•	完成数据库表结构、LoginWindow、ReviewTab雏形
-	2.	第二阶段：MTP 下载 + FileParser + Checker 实现 + Summary/Detail 差异功能
-	•	可对比并产生差异
-	3.	第三阶段：评论模块 + sendback + S4回写 + Checklist 签名导出
-	•	完整实现业务流程
-	4.	第四阶段：历史统计 + UI 优化 + 性能调优
-	•	HomeTab 历史统计、易错信息
-	5.	第五阶段：测试与上线
-	•	回归测试、用户培训
-
-8. 自检与可执行性
-
-自检：
-	1.	是否满足“2.业务需求”章节？
-	•	核查对象、下载报表、读取原始文件、多维度对比 -> 在本 PRD 第 3.2, 3.3 中已覆盖
-	•	差异处理与评论、sendback -> 第 3.4 中实现
-	•	上传文件（S4 Dividend IP Recon 写回）-> 第 3.5 中实现
-	•	Checklist 签名 -> 第 3.6 中实现
-	•	多用户并行、数据库存储 -> 第 3.1, 3.6 中提及SQLite；并行在 UI + Session 中
-	•	自动化、导出、警告 -> 第 3.2 解析； Detail/Review 提供导出；缺失报警
-	•	历史差异统计 -> 第 3.7
-	2.	模块分配是否合理？
-	•	核心功能拆分在MTPDownloader / FileParser / Checker / UI / CommentsManager / Checklist 等模块，清晰可扩展
-	3.	开发工程师能否根据此文档直接开始开发？
-	•	文档说明了：
-	•	功能点、表结构、UI布局、对比逻辑、如何评论、如何写回、如何签名
-	•	接口：内部系统 + SQLite
-	•	应该已足够明确
-
-如需再详细的接口定义（每个 Python 模块的函数签名、参数）可写在附录或另行撰写技术设计文档。
-
-9. 附录（可选）
-	•	数据库表结构示例
-	•	外部系统 API 说明（若有文档）
-	•	界面原型图（可另附像 Figma / Axure 原型）
-	•	常见问题：列举日常操作 / 异常处理
-
-结论
-
-此 PRD 综合了完善后的业务需求与UI/技术设计。如果开发团队在阅读后仍有疑惑，可根据附录或举行需求澄清会议解决。但就目前内容而言，一个具备 Python+PySide2+SQLite 开发经验的团队，应该能基于此文档顺利开始开发。
-
-	最后再次确认：
-		•	所有“完善后的 2.业务需求”要点已经在本文档中逐条对应，且模块功能划分明确；
-	•	参考了 CS480 Spec 格式，对系统特性、外部接口、UI、非功能需求做了完备说明；
-	•	如无其他新增需求或变更，开发即可进行。
-
-——完
+# 检查响应
+if response.status_code == 200:
+    print("成功获取响应内容：")
+    print(response.text)  # 输出页面内容
+else:
+    print(f"请求失败，状态码: {response.status_code}")
