@@ -1,186 +1,233 @@
-为了让登录和下载功能在异步模式下独立触发并共享会话状态，需要在 GUI 应用中合理管理异步事件循环和会话对象。以下是分步解决方案：
+为了在保持PySide2 UI响应性的同时整合异步操作，我们可以采用以下方案：
 
----
-
-### 1. 创建异步管理器类（处理事件循环）
 ```python
-# async_manager.py
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-
-class AsyncManager:
-    def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        self.executor = ThreadPoolExecutor(max_workers=1)
-        
-    def run_async_task(self, coro):
-        """在后台线程运行异步任务"""
-        future = self.loop.run_in_executor(
-            self.executor,
-            lambda: self.loop.run_until_complete(coro)
-        )
-        return future
-```
-
----
-
-### 2. 修改异步处理器类（保持会话状态）
-```python
-# my_rts_handler.py
+# 修改后的 myrts_handler.py
 import aiohttp
+import asyncio
 import aiofiles
 import os
 
+
 class MyRTSHandler:
     def __init__(self):
-        self.session = None
+        self._session = None
         self.is_signed = False
 
     async def login(self, username, password):
-        """独立登录方法"""
-        if self.session and not self.session.closed:
-            await self.session.close()
-            
-        self.session = aiohttp.ClientSession()
+        """异步登录方法"""
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+        self._session = aiohttp.ClientSession()
         login_url = 'https://myrts.com/login'
+        login_data = {
+            'username': username,
+            'password': password
+        }
         
-        async with self.session.post(
-            login_url,
-            data={'username': username, 'password': password}
-        ) as res:
-            self.is_signed = res.status == 200
-
-    async def download_45days_csv(self, export_path, date, funds):
-        """需要先登录才能调用的下载方法"""
-        if not self.is_signed:
-            raise RuntimeError("Not logged in")
-            
-        # 保持原有下载逻辑...
-        # （使用 self.session 进行请求）
-```
-
----
-
-### 3. 在 PySide2 界面中的集成
-```python
-# main_window.py
-from PySide2.QtWidgets import QMainWindow, QPushButton
-from async_manager import AsyncManager
-from my_rts_handler import MyRTSHandler
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        
-        # 初始化异步系统
-        self.async_manager = AsyncManager()
-        self.handler = MyRTSHandler()
-        
-        # 创建界面组件
-        self.login_btn = QPushButton("Login", self)
-        self.download_btn = QPushButton("Download", self)
-        
-        # 绑定事件
-        self.login_btn.clicked.connect(self.on_login)
-        self.download_btn.clicked.connect(self.on_download)
-        
-    def on_login(self):
-        """登录按钮点击事件"""
-        future = self.async_manager.run_async_task(
-            self.handler.login("user", "pass")
-        )
-        future.add_done_callback(
-            lambda _: print("Login status:", self.handler.is_signed)
-        )
-        
-    def on_download(self):
-        """下载按钮点击事件"""
-        if not self.handler.is_signed:
-            print("请先登录！")
-            return
-            
-        future = self.async_manager.run_async_task(
-            self.handler.download_45days_csv(
-                "./data",
-                "2023-01-01",
-                ["0001", "0002"]
-            )
-        )
-        future.add_done_callback(
-            lambda _: print("下载完成！")
-        )
-```
-
----
-
-### 4. 关键实现细节说明
-
-#### 会话状态保持
-- `MyRTSHandler` 实例在窗口生命周期内持续存在
-- 登录时创建新的 `ClientSession` 并保留引用
-- 下载时复用已存在的会话对象
-
-#### 异步任务调度
-- 使用独立线程运行事件循环（避免阻塞GUI线程）
-- `AsyncManager` 封装了线程安全的异步任务调度
-- 通过 `run_async_task` 方法提交协程任务
-
-#### 线程安全注意事项
-- GUI 回调中不直接访问异步对象
-- 通过 `future.add_done_callback` 处理完成通知
-- 使用 `ThreadPoolExecutor` 确保单一线程执行异步任务
-
-#### 错误处理建议
-```python
-# 在 run_async_task 中添加错误处理
-def run_async_task(self, coro):
-    async def wrapped():
         try:
-            return await coro
+            async with self._session.post(login_url, data=login_data) as response:
+                self.is_signed = response.status == 200
+                if not self.is_signed:
+                    await self._session.close()
         except Exception as e:
-            print(f"Async error: {str(e)}")
-            return None
-            
-    future = self.loop.run_in_executor(
-        self.executor,
-        lambda: self.loop.run_until_complete(wrapped())
-    )
-    return future
+            await self._session.close()
+            raise RuntimeError(f"Login failed: {str(e)}")
+
+    async def download_45days_csv(self, export_path='', date='', funds: list = None, concurrency=20):
+        """异步批量下载文件"""
+        if not self.is_signed or self._session.closed:
+            raise RuntimeError("Not logged in")
+
+        if not funds:
+            return
+
+        url = 'https://myrts.com/export'
+        semaphore = asyncio.Semaphore(concurrency)
+        tasks = []
+
+        os.makedirs(export_path, exist_ok=True)
+
+        for fund in funds:
+            if not fund or len(fund) != 4:
+                continue
+
+            form_data_1 = {'__para': f'fundcode={fund}&date={date}', '__request': '603'}
+            form_data_2 = {'__para': f'fundcode={fund}&date={date}', '__request': '605'}
+
+            for form_data, suffix in [(form_data_1, f'Dtl_{fund}.csv'), 
+                                    (form_data_2, f'{fund}.csv')]:
+                file_path = os.path.join(export_path, suffix)
+                tasks.append(self._download_file(semaphore, url, form_data, file_path))
+
+        await asyncio.gather(*tasks)
+
+    async def _download_file(self, semaphore, url, form_data, file_path):
+        """异步下载单个文件"""
+        async with semaphore:
+            for retry in range(2):
+                try:
+                    async with self._session.post(url, data=form_data) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            async with aiofiles.open(file_path, 'wb') as f:
+                                await f.write(content)
+                            return True
+                except Exception as e:
+                    if retry == 1:
+                        raise RuntimeError(f"Download failed: {str(e)}")
+                    await asyncio.sleep(1)
+        return False
+
+    async def close(self):
+        """关闭会话"""
+        if self._session and not self._session.closed:
+            await self._session.close()
 ```
 
----
-
-### 5. 部署注意事项
-
-1. 安装必要依赖：
-```bash
-pip install aiohttp aiofiles PySide2
-```
-
-2. 启动GUI时初始化异步系统：
 ```python
-if __name__ == "__main__":
-    app = QApplication()
-    window = MainWindow()
-    window.show()
-    app.exec_()
-    # 程序退出时清理异步资源
-    window.async_manager.executor.shutdown()
+# 修改后的 helper.py（Worker 类适配异步）
+from PySide2.QtCore import QObject, Signal, QRunnable
+
+class WorkerSignals(QObject):
+    finished = Signal()
+    error = Signal(str)
+    result = Signal(object)
+
+class AsyncWorker(QRunnable):
+    def __init__(self, coroutine, task_id=None):
+        super().__init__()
+        self.coroutine = coroutine
+        self.signals = WorkerSignals()
+        self.task_id = task_id
+
+    def run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.coroutine)
+            self.signals.finished.emit()
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            loop.close()
 ```
 
-3. 会话超时处理建议：
 ```python
-# 在 MyRTSHandler 中添加会话刷新逻辑
-async def check_session(self):
-    if self.session and self.session.closed:
-        await self.login(last_username, last_password)
+# 修改后的 LoginWindow 部分
+class LoginWindow(FramelessWindow):
+    # ... 其他代码保持不变 ...
+
+    def on_login_clicked(self):
+        if not self.password.text():
+            self.createWarningInfoBar('Enter passcode', 'Please enter PIN + TOKEN as passcode')
+            return
+
+        self.inProgressBar.start()
+        self.login_button.setEnabled(False)
+        self.login_button.setText('Logging in...')
+
+        # 使用异步Worker
+        async def login_task():
+            self.myrts_handler = MyRTSHandler()
+            await self.myrts_handler.login(
+                self.username.text(),
+                self.password.text()
+            )
+
+        worker = AsyncWorker(login_task())
+        worker.signals.error.connect(self.createErrorInfoBar)
+        worker.signals.finished.connect(self.move_to_next_ui)
+        self.thread_pool.start(worker)
 ```
 
----
+```python
+# 修改后的 MainWindow 部分
+class MainWindow(FramelessWindow):
+    # ... 其他代码保持不变 ...
 
-这种设计模式实现了：
-- 登录/下载功能的完全异步化
-- 会话状态的持久化保持
-- GUI线程与异步任务的解耦
-- 安全的跨线程异步操作
-- 可扩展的错误处理机制
+    def on_download_clicked(self):
+        self.download_button.setEnabled(False)
+        self.download_button.setText('Downloading...')
+        self.inProgressBar.start()
+        
+        for downloader in self.downloaders:
+            downloader.update_para()
+            self.running_tasks += 1
+            downloader.set_read_only()
+
+            async def download_task(downloader):
+                try:
+                    await self.myrts_handler.download_45days_csv(
+                        export_path=downloader.export_path,
+                        date=downloader.date,
+                        funds=downloader.funds
+                    )
+                except Exception as e:
+                    raise RuntimeError(f"Download failed: {str(e)}")
+
+            worker = AsyncWorker(download_task(downloader))
+            worker.signals.error.connect(lambda e: self.createErrorInfoBar(e))
+            worker.signals.finished.connect(self.on_download_finished)
+            self.thread_pool.start(worker)
+```
+
+关键修改点说明：
+
+1. **异步架构适配**：
+   - 使用 `aiohttp` 替代 `requests`
+   - 所有网络操作改为 `async/await` 语法
+   - 保持 session 长期有效（跨不同操作）
+
+2. **线程管理**：
+   - 每个异步任务使用独立的 event loop
+   - 通过 `AsyncWorker` 包装协程
+   - 使用 Qt 的线程池管理并发
+
+3. **会话生命周期**：
+   - 登录时创建 `ClientSession`
+   - 下载时复用同一个 session
+   - 退出时自动关闭 session
+
+4. **错误处理增强**：
+   - 统一异常捕获机制
+   - 自动重试逻辑
+   - 错误信号传递到 UI 层
+
+5. **UI 响应保障**：
+   - 所有阻塞操作在后台线程执行
+   - 进度条状态自动更新
+   - 按钮状态与任务状态联动
+
+使用注意事项：
+
+1. **依赖安装**：
+   ```bash
+   pip install aiohttp aiofiles
+   ```
+
+2. **并发控制**：
+   - 在 `download_45days_csv` 方法中调整 `concurrency` 参数
+   - 建议值 10-50（根据服务器承受能力）
+
+3. **会话管理**：
+   - 登录失败会自动关闭 session
+   - 程序退出时需要调用 `close()` 方法
+
+4. **异常处理**：
+   - 登录失败会抛出 RuntimeError
+   - 下载失败会显示错误信息栏
+   - 网络错误自动重试 1 次
+
+5. **线程安全**：
+   - 每个 Worker 使用独立 event loop
+   - 不同任务之间 session 自动复用
+   - Qt 信号线程安全机制保障
+
+这个方案保持了原有 UI 架构，同时通过：
+1. 异步网络库提升性能
+2. 专用 Worker 类处理协程
+3. 合理的 session 生命周期管理
+4. 完善的错误处理机制
+
+在保持代码结构清晰的前提下，实现了异步高性能下载，同时确保 UI 的响应性。
