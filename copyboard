@@ -1,113 +1,372 @@
-你的观察很敏锐！在 PDF 受限制时，Chrome 仍然允许你“右键 → 用 Google 搜索”，这说明 浏览器内部仍然可以访问选中的文本，但 右键菜单的“复制”被屏蔽了。
+'''
+helper.py
 
-你的想法是：
-	•	右键 → Google 搜索 之后，文本会自动出现在搜索框中，并且可以复制。
-	•	如果能用 JavaScript 直接获取选中的文本并复制到剪贴板，就能跳过“Google 搜索”这一步。
+import sys
+import traceback
 
-能否用 JavaScript 直接复制？
+from PySide2.QtCore import QObject, Signal, QRunnable, Slot
 
-通常，在 普通网页 上，JavaScript 确实可以使用 document.getSelection() 获取选中的文本，并自动复制到剪贴板：
+class WorkSignals(QObject):
+    start = Signal(int)
+    finished = Signal(int)
+    error = Signal(str)
+    result = Signal(object, int)
+    progress = Signal(int)
+    message = Signal(str)
 
-document.addEventListener('keydown', function(event) {
-    if (event.ctrlKey && event.key === 'c') {
-        let selectedText = document.getSelection().toString();
-        navigator.clipboard.writeText(selectedText).then(() => {
-            console.log('已复制: ' + selectedText);
-        });
-    }
-});
+class Worker(QRunnable, QObject):
+    def __init__(self, func, *args, task_id=0, **kwargs):
+        super().__init__()
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkSignals()
+        self.task_id = task_id
 
-但是，在 PDF 预览器（如 Chrome 内置的 PDF.js）里，这种方法通常不起作用！
-原因：
-	•	PDF.js 处理 PDF 渲染时，不是用标准的 HTML，而是用 <canvas> 或 <iframe>，使得 document.getSelection() 不能正常访问文本。
+    @Slot()
+    def run(self):
+        try:
+            self.signals.start.emit(self.task_id)
+            result = self.func(*self.args, **self.kwargs)
+        except Exception as e:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit(f'{exctype.__name__}: {value}/n{str(e)}/n{traceback.format_exc()}')
+        else:
+            self.signals.result.emit(result, self.task_id)
+        finally:
+            self.signals.finished.emit(self.task_id)
 
-替代方法
 
-如果 document.getSelection() 无法直接获取选中内容，可以考虑 利用 Google 搜索框的行为：
-	1.	模拟“Google 搜索”但不真正搜索
-	2.	拦截搜索框里的文本
-	3.	自动复制到剪贴板
+login.py
 
-方法 1：手动脚本（Bookmarklet）
+import os
+import sys
 
-你可以创建一个 书签脚本（Bookmarklet），当你在 PDF 页面选中文本后，点击书签，就能把文本复制到剪贴板：
-	1.	创建一个新书签
-	2.	在 URL 栏输入以下 JavaScript 代码
+from PySide2.QtCore import Qt, Slot, QThreadPool
+from PySide2.QtGui import QFont
+from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout
 
-javascript:(function(){
-    let selectedText = document.getSelection().toString();
-    if (!selectedText) { alert("请先选中文字！"); return; }
-    navigator.clipboard.writeText(selectedText).then(() => {
-        alert("已复制到剪贴板: " + selectedText);
-    }).catch(err => {
-        console.error("复制失败: ", err);
-    });
-})();
+from qfluentwidgets import (LineEdit, PasswordLineEdit, BodyLabel, PushButton,
+                            TitleLabel, InfoBar, InfoBarPosition,
+                            IndeterminateProgressBar)
+from qframelesswindow import FramelessWindow
 
-	3.	点击保存
-	4.	在 PDF 页面选中内容后，点击这个书签，就能复制！
+from helper import Worker
+from myrts_handler.myrts_handler import MyRTSHandler
+from main_window import MainWindow
 
-方法 2：自动触发 Google 搜索框
+# login window
+class LoginWindow(FramelessWindow):
+    def __init__(self):
+        super().__init__()
+        self.initWindow()
+        self.myrts_session = None
 
-如果方法 1 无效，你可以 在地址栏手动输入 JavaScript 代码（需要每次手动运行）：
+    def initWindow(self):
+        self.thread_pool = QThreadPool()
+        self.resize(300, 200)
 
-javascript:(function(){
-    let selectedText = document.getSelection().toString();
-    if (!selectedText) { alert("请先选中文字！"); return; }
-    let searchUrl = "https://www.google.com/search?q=" + encodeURIComponent(selectedText);
-    window.open(searchUrl, "_blank");
-})();
+        desktop = QApplication.screens()[0].availableGeometry()
+        w, h = desktop.width(), desktop.height()
+        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
 
-这样 Google 搜索框里会出现选中的文本，你可以从那里复制。
+        self.vBoxLayout = QVBoxLayout(self)
+        self.hBoxLayout_1 = QHBoxLayout(self)
+        self.hBoxLayout_2 = QHBoxLayout(self)
+        self.username = LineEdit(self)
+        self.password = PasswordLineEdit(self)
+        self.username.setText(os.getlogin())
+        self.username.setReadOnly(True)
 
-方法 3：扩展插件（高级方案）
+        self.login_button = PushButton('Submit', self)
+        self.vBoxLayout.setContentsMargins(30, 30, 30, 30)
+        self.vBoxLayout.setSpacing(20)
+        _title = TitleLabel('Login to MYRTS')
+        _title.setFont(QFont('Times New Roman', 16))
+        _title.setStyleSheet("color: #000063")
+        self.vBoxLayout.addWidget(_title)
+        self.hBoxLayout_1.addWidget(BodyLabel('User ID:'), stretch=1)
+        self.hBoxLayout_1.addWidget(self.username, stretch=4)
+        self.hBoxLayout_2.addWidget(BodyLabel('Passcode:'), stretch=1)
+        self.hBoxLayout_2.addWidget(self.password, stretch=4)
+        self.vBoxLayout.addLayout(self.hBoxLayout_1)
+        self.vBoxLayout.addLayout(self.hBoxLayout_2)
+        self.vBoxLayout.addWidget(self.login_button)
 
-如果你愿意，可以自己写一个 Chrome 扩展，在 PDF 预览页面监听选中的文本，并复制到剪贴板：
-	1.	创建 manifest.json
+        self.inProgressBar = IndeterminateProgressBar(self)
+        self.vBoxLayout.addWidget(self.inProgressBar)
+        self.inProgressBar.stop()
 
-{
-  "manifest_version": 3,
-  "name": "PDF 复制助手",
-  "version": "1.0",
-  "permissions": ["activeTab", "scripting", "clipboardWrite"],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_title": "复制选中的 PDF 文本"
-  }
-}
+        self.login_button.clicked.connect(self.on_login_clicked)
 
-	2.	创建 background.js
+    def on_login_clicked(self):
+        if not self.password.text():
+            self.createWarningInfoBar('Enter passcode', 'Please enter PIN + TOKEN as passcode')
+            return
 
-chrome.action.onClicked.addListener((tab) => {
-    chrome.scripting.executeScript({
-        target: {tabId: tab.id},
-        function: copySelectedText
-    });
-});
+        self.inProgressBar.start()
+        self.login_button.setEnabled(False)
+        self.login_button.setText('Logging in...')
 
-function copySelectedText() {
-    let selectedText = document.getSelection().toString();
-    if (selectedText) {
-        navigator.clipboard.writeText(selectedText).then(() => {
-            alert("已复制: " + selectedText);
-        });
-    } else {
-        alert("请先选中文字！");
-    }
-}
+        worker = Worker(self.login, self.username.text(), self.password.text(), task_id=1)
+        worker.signals.error.connect(self.createErrorInfoBar)
+        worker.signals.finished.connect(self.move_to_next_ui)
+        self.thread_pool.start(worker)
 
-	3.	加载扩展
-	•	在 Chrome 里打开 chrome://extensions
-	•	开启“开发者模式”
-	•	点击“加载已解压的扩展”，选择你的文件夹
-	•	点击扩展的图标，就能复制选中的 PDF 文本！
+    def login(self, username, password):
+        self.myrts_handler = MyRTSHandler(username, password)
 
-总结
+    def move_to_next_ui(self):
+        self.inProgressBar.stop()
+        self.login_button.setEnabled(True)
+        self.login_button.setText('Submit')
 
-✅ 方法 1（书签脚本）：适用于普通 HTML 网页，如果 PDF 允许 document.getSelection()，这个方法就能用。
-✅ 方法 2（Google 搜索跳转）：利用 Google 搜索框间接复制文本，手动操作较多。
-✅ 方法 3（Chrome 扩展）：自动化程度最高，但需要自己安装扩展。
+        if self.myrts_handler.is_signed:
+            self.close()
+            self.main_window = MainWindow()
+            self.main_window.myrts_handler = self.myrts_handler
+            self.main_window.show()
 
-你可以先试试 方法 1，如果不行，再尝试 方法 2 或 3！
+    def createWarningInfoBar(self, title, content):
+        InfoBar.warning(
+            title=title,
+            content=content,
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP_LEFT,
+            duration=2000,
+            parent=self
+        )
+
+    def createErrorInfoBar(self, content, title='Unknown Error'):
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Vertical,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=-1,
+            parent=self
+        )
+
+
+if __name__ == '__main__':
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
+    app = QApplication(sys.argv)
+    window = LoginWindow()
+    window.show()
+    app.exec_()
+
+
+main_window.py
+
+import os
+import sys
+import re
+
+from PySide2.QtCore import Qt, Slot, QThreadPool
+from PySide2.QtGui import QFont
+from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QCompleter
+
+from qfluentwidgets import (LineEdit, PasswordLineEdit, BodyLabel, PushButton,
+                            TitleLabel, InfoBar, InfoBarPosition,
+                            IndeterminateProgressBar, CheckBox,
+                            SearchLineEdit, DatePicker, PrimaryPushButton)
+from qframelesswindow import FramelessWindow
+
+from helper import Worker
+
+class MainWindow(FramelessWindow):
+    def __init__(self):
+        super().__init__()
+        self.myrts_handler = None
+        self.initWindow()
+        self.thread_pool = QThreadPool()
+        self.running_tasks = 0
+
+    def initWindow(self):
+        self.resize(700, 500)
+        desktop = QApplication.screens()[0].availableGeometry()
+        w, h = desktop.width(), desktop.height()
+        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
+
+        self.vBoxLayout_1 = QVBoxLayout(self)
+        self.downloaders = []
+        download1 = DownloadUnit()
+        self.downloaders.append(download1)
+        self.download_button = PrimaryPushButton('Download', self)
+
+        for download in self.downloaders:
+            self.vBoxLayout_1.addLayout(download)
+
+        self.inProgressBar = IndeterminateProgressBar(self)
+        self.vBoxLayout_1.addWidget(self.inProgressBar)
+        self.vBoxLayout_1.addWidget(self.download_button)
+
+        self.inProgressBar.stop()
+        self.download_button.clicked.connect(self.on_download_clicked)
+
+    def on_download_clicked(self):
+        self.download_button.setEnabled(False)
+        self.download_button.setText('Downloading...')
+        self.inProgressBar.start()
+        for downloader in self.downloaders:
+            downloader.update_para()
+            self.running_tasks += 1
+            downloader.set_read_only()
+            worker = Worker(self.download, downloader)
+            worker.signals.error.connect(self.createErrorInfoBar)
+            worker.signals.finished.connect(self.on_download_finished)
+            self.thread_pool.start(worker)
+
+    def download(self, downloader):
+        self.myrts_handler.download(export_path=downloader.export_path,
+                                    date=downloader.date,
+                                    funds=downloader.funds,
+                                    client=downloader.client)
+
+class DownloadUnit(QVBoxLayout):
+    def __init__(self):
+        super().__init__()
+
+        self.setSpacing(1)
+        self.setContentsMargins(15, 15, 15, 15)
+        self.export_path_ui = LineEdit()
+        self.funds_ui = LineEdit()
+        self.date_ui = EngDatePicker()
+
+        self.client_ui = SearchLineEdit()
+        self.client_ui.setPlaceholderText(self.tr('Type a client name'))
+        self.client_ui.setClearButtonEnabled(True)
+        self.client_ui.setFixedWidth(230)
+        clients = [
+            "Star Platinum", "Hierophant Green",
+            "Made in Haven", "King Crimson",
+            "Silver Chariot", "Crazy diamond",
+            "Metallica", "Another One Bites The Dust",
+            "Heaven's Door", "Killer Queen",
+            "The Grateful Dead", "Stone Free",
+            "The World", "Sticky Fingers",
+            "Ozone Baby", "Love Love Deluxe",
+            "Hermit Purple", "Gold Experience",
+            "King Nothing", "Paper Moon King",
+            "Scary Monster", "Mandom",
+            "20th Century Boy", "Tusk Act 4",
+            "Ball Breaker", "Sex Pistols",
+            "D4C • Love Train", "Born This Way",
+            "SOFT & WET", "Paisley Park",
+            "Wonder of U", "Walking Heart",
+            "Cream Starter", "November Rain",
+            "Smooth Operators", "The Matte Kudasai"
+        ]
+        completer = QCompleter(clients, self.client_ui)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.client_ui.setCompleter(completer)
+
+        hBoxLayout_1 = QHBoxLayout()
+        hBoxLayout_2 = QHBoxLayout()
+        hBoxLayout_3 = QHBoxLayout()
+        hBoxLayout_1.addWidget(BodyLabel('Export Path:'), stretch=1)
+        hBoxLayout_1.addWidget(self.export_path_ui, stretch=4)
+        hBoxLayout_2.addWidget(BodyLabel('As of Date:'), stretch=1)
+        hBoxLayout_2.addWidget(self.date_ui, stretch=2)
+        hBoxLayout_3.addWidget(BodyLabel('Client:'), stretch=1)
+        hBoxLayout_3.addWidget(self.client_ui, stretch=2)
+        hBoxLayout_4 = QHBoxLayout()
+        hBoxLayout_4.addLayout(hBoxLayout_2)
+        hBoxLayout_4.addLayout(hBoxLayout_3)
+        self.addLayout(hBoxLayout_1)
+        self.addLayout(hBoxLayout_4)
+        hBoxLayout_5 = QHBoxLayout()
+        hBoxLayout_5.addWidget(BodyLabel('Funds:'), stretch=1)
+        hBoxLayout_5.addWidget(self.funds_ui, stretch=4)
+        self.addLayout(hBoxLayout_5)
+
+        self.addStretch()
+
+    def update_para(self):
+        self.export_path = self.export_path_ui.text()
+        self.date = self.date_ui.getDate().toString('yyyy-MM-dd')
+        self.client = self.client_ui.text()
+        self.funds = re.findall(r'\b[A-Za-z0-9]+\b', self.funds_ui.text())
+
+    def set_read_only(self):
+        self.export_path_ui.setEnabled(False)
+        self.funds_ui.setEnabled(False)
+        self.date_ui.setEnabled(False)
+        self.client_ui.setEnabled(False)
+
+    def set_editable(self):
+        self.export_path_ui.setEnabled(True)
+        self.funds_ui.setEnabled(True)
+        self.date_ui.setEnabled(True)
+        self.client_ui.setEnabled(True)
+
+
+class EngDatePicker(DatePicker):
+    """ English date picker """
+
+    def __init__(self, parent=None):
+        super().__init__(parent, DatePicker.YYYY_MM_DD)
+        self.MONTH = "Month"
+        self.YEAR = "Year"
+        self.DAY = "Day"
+        self.setDateFormat(self.YYYY_MM_DD)
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.exec_()
+
+myrts_handler.py
+
+import requests
+
+class MyRTSHandler:
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
+        self.session = requests.Session()
+        self.is_signed = False
+        self.login()
+
+    def login(self):
+        self.is_signed = True
+        return
+
+        login_url = 'https://myrts.com/login'
+        login_data = {
+            'username': self.username,
+            'PASSWORD': self.password
+        }
+        res = self.session.post(login_url, data=login_data)
+
+        if 'Set-Cookie' in res.headers.keys():
+            self.is_signed = True
+
+    def download_45days_csv(self,
+                            export_path='',
+                            date='',
+                            funds=None,
+                            client=''):
+        url = 'https://cloud.statestr.com/ratweb/export'
+        form_data = {
+            'exportType': 'csv',
+            'date': date,
+            'funds': funds,
+            'client': client,
+            'exportPath': export_path
+        }
+
+        res = self.session.post(url, data=form_data)
+
+        # save the file
+        with open(export_path, 'wb') as f:
+            f.write(res.content)
+
+'''
