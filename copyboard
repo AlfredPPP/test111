@@ -1,372 +1,105 @@
-'''
-helper.py
-
-import sys
-import traceback
-
-from PySide2.QtCore import QObject, Signal, QRunnable, Slot
-
-class WorkSignals(QObject):
-    start = Signal(int)
-    finished = Signal(int)
-    error = Signal(str)
-    result = Signal(object, int)
-    progress = Signal(int)
-    message = Signal(str)
-
-class Worker(QRunnable, QObject):
-    def __init__(self, func, *args, task_id=0, **kwargs):
-        super().__init__()
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs
-        self.signals = WorkSignals()
-        self.task_id = task_id
-
-    @Slot()
-    def run(self):
-        try:
-            self.signals.start.emit(self.task_id)
-            result = self.func(*self.args, **self.kwargs)
-        except Exception as e:
-            traceback.print_exc()
-            exctype, value = sys.exc_info()[:2]
-            self.signals.error.emit(f'{exctype.__name__}: {value}/n{str(e)}/n{traceback.format_exc()}')
-        else:
-            self.signals.result.emit(result, self.task_id)
-        finally:
-            self.signals.finished.emit(self.task_id)
-
-
-login.py
-
+import aiohttp
+import asyncio
+import aiofiles
 import os
-import sys
 
-from PySide2.QtCore import Qt, Slot, QThreadPool
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout
-
-from qfluentwidgets import (LineEdit, PasswordLineEdit, BodyLabel, PushButton,
-                            TitleLabel, InfoBar, InfoBarPosition,
-                            IndeterminateProgressBar)
-from qframelesswindow import FramelessWindow
-
-from helper import Worker
-from myrts_handler.myrts_handler import MyRTSHandler
-from main_window import MainWindow
-
-# login window
-class LoginWindow(FramelessWindow):
-    def __init__(self):
-        super().__init__()
-        self.initWindow()
-        self.myrts_session = None
-
-    def initWindow(self):
-        self.thread_pool = QThreadPool()
-        self.resize(300, 200)
-
-        desktop = QApplication.screens()[0].availableGeometry()
-        w, h = desktop.width(), desktop.height()
-        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
-
-        self.vBoxLayout = QVBoxLayout(self)
-        self.hBoxLayout_1 = QHBoxLayout(self)
-        self.hBoxLayout_2 = QHBoxLayout(self)
-        self.username = LineEdit(self)
-        self.password = PasswordLineEdit(self)
-        self.username.setText(os.getlogin())
-        self.username.setReadOnly(True)
-
-        self.login_button = PushButton('Submit', self)
-        self.vBoxLayout.setContentsMargins(30, 30, 30, 30)
-        self.vBoxLayout.setSpacing(20)
-        _title = TitleLabel('Login to MYRTS')
-        _title.setFont(QFont('Times New Roman', 16))
-        _title.setStyleSheet("color: #000063")
-        self.vBoxLayout.addWidget(_title)
-        self.hBoxLayout_1.addWidget(BodyLabel('User ID:'), stretch=1)
-        self.hBoxLayout_1.addWidget(self.username, stretch=4)
-        self.hBoxLayout_2.addWidget(BodyLabel('Passcode:'), stretch=1)
-        self.hBoxLayout_2.addWidget(self.password, stretch=4)
-        self.vBoxLayout.addLayout(self.hBoxLayout_1)
-        self.vBoxLayout.addLayout(self.hBoxLayout_2)
-        self.vBoxLayout.addWidget(self.login_button)
-
-        self.inProgressBar = IndeterminateProgressBar(self)
-        self.vBoxLayout.addWidget(self.inProgressBar)
-        self.inProgressBar.stop()
-
-        self.login_button.clicked.connect(self.on_login_clicked)
-
-    def on_login_clicked(self):
-        if not self.password.text():
-            self.createWarningInfoBar('Enter passcode', 'Please enter PIN + TOKEN as passcode')
-            return
-
-        self.inProgressBar.start()
-        self.login_button.setEnabled(False)
-        self.login_button.setText('Logging in...')
-
-        worker = Worker(self.login, self.username.text(), self.password.text(), task_id=1)
-        worker.signals.error.connect(self.createErrorInfoBar)
-        worker.signals.finished.connect(self.move_to_next_ui)
-        self.thread_pool.start(worker)
-
-    def login(self, username, password):
-        self.myrts_handler = MyRTSHandler(username, password)
-
-    def move_to_next_ui(self):
-        self.inProgressBar.stop()
-        self.login_button.setEnabled(True)
-        self.login_button.setText('Submit')
-
-        if self.myrts_handler.is_signed:
-            self.close()
-            self.main_window = MainWindow()
-            self.main_window.myrts_handler = self.myrts_handler
-            self.main_window.show()
-
-    def createWarningInfoBar(self, title, content):
-        InfoBar.warning(
-            title=title,
-            content=content,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP_LEFT,
-            duration=2000,
-            parent=self
-        )
-
-    def createErrorInfoBar(self, content, title='Unknown Error'):
-        InfoBar.error(
-            title=title,
-            content=content,
-            orient=Qt.Vertical,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            duration=-1,
-            parent=self
-        )
-
-
-if __name__ == '__main__':
-    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-
-    app = QApplication(sys.argv)
-    window = LoginWindow()
-    window.show()
-    app.exec_()
-
-
-main_window.py
-
-import os
-import sys
-import re
-
-from PySide2.QtCore import Qt, Slot, QThreadPool
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QCompleter
-
-from qfluentwidgets import (LineEdit, PasswordLineEdit, BodyLabel, PushButton,
-                            TitleLabel, InfoBar, InfoBarPosition,
-                            IndeterminateProgressBar, CheckBox,
-                            SearchLineEdit, DatePicker, PrimaryPushButton)
-from qframelesswindow import FramelessWindow
-
-from helper import Worker
-
-class MainWindow(FramelessWindow):
-    def __init__(self):
-        super().__init__()
-        self.myrts_handler = None
-        self.initWindow()
-        self.thread_pool = QThreadPool()
-        self.running_tasks = 0
-
-    def initWindow(self):
-        self.resize(700, 500)
-        desktop = QApplication.screens()[0].availableGeometry()
-        w, h = desktop.width(), desktop.height()
-        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
-
-        self.vBoxLayout_1 = QVBoxLayout(self)
-        self.downloaders = []
-        download1 = DownloadUnit()
-        self.downloaders.append(download1)
-        self.download_button = PrimaryPushButton('Download', self)
-
-        for download in self.downloaders:
-            self.vBoxLayout_1.addLayout(download)
-
-        self.inProgressBar = IndeterminateProgressBar(self)
-        self.vBoxLayout_1.addWidget(self.inProgressBar)
-        self.vBoxLayout_1.addWidget(self.download_button)
-
-        self.inProgressBar.stop()
-        self.download_button.clicked.connect(self.on_download_clicked)
-
-    def on_download_clicked(self):
-        self.download_button.setEnabled(False)
-        self.download_button.setText('Downloading...')
-        self.inProgressBar.start()
-        for downloader in self.downloaders:
-            downloader.update_para()
-            self.running_tasks += 1
-            downloader.set_read_only()
-            worker = Worker(self.download, downloader)
-            worker.signals.error.connect(self.createErrorInfoBar)
-            worker.signals.finished.connect(self.on_download_finished)
-            self.thread_pool.start(worker)
-
-    def download(self, downloader):
-        self.myrts_handler.download(export_path=downloader.export_path,
-                                    date=downloader.date,
-                                    funds=downloader.funds,
-                                    client=downloader.client)
-
-class DownloadUnit(QVBoxLayout):
-    def __init__(self):
-        super().__init__()
-
-        self.setSpacing(1)
-        self.setContentsMargins(15, 15, 15, 15)
-        self.export_path_ui = LineEdit()
-        self.funds_ui = LineEdit()
-        self.date_ui = EngDatePicker()
-
-        self.client_ui = SearchLineEdit()
-        self.client_ui.setPlaceholderText(self.tr('Type a client name'))
-        self.client_ui.setClearButtonEnabled(True)
-        self.client_ui.setFixedWidth(230)
-        clients = [
-            "Star Platinum", "Hierophant Green",
-            "Made in Haven", "King Crimson",
-            "Silver Chariot", "Crazy diamond",
-            "Metallica", "Another One Bites The Dust",
-            "Heaven's Door", "Killer Queen",
-            "The Grateful Dead", "Stone Free",
-            "The World", "Sticky Fingers",
-            "Ozone Baby", "Love Love Deluxe",
-            "Hermit Purple", "Gold Experience",
-            "King Nothing", "Paper Moon King",
-            "Scary Monster", "Mandom",
-            "20th Century Boy", "Tusk Act 4",
-            "Ball Breaker", "Sex Pistols",
-            "D4C • Love Train", "Born This Way",
-            "SOFT & WET", "Paisley Park",
-            "Wonder of U", "Walking Heart",
-            "Cream Starter", "November Rain",
-            "Smooth Operators", "The Matte Kudasai"
-        ]
-        completer = QCompleter(clients, self.client_ui)
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self.client_ui.setCompleter(completer)
-
-        hBoxLayout_1 = QHBoxLayout()
-        hBoxLayout_2 = QHBoxLayout()
-        hBoxLayout_3 = QHBoxLayout()
-        hBoxLayout_1.addWidget(BodyLabel('Export Path:'), stretch=1)
-        hBoxLayout_1.addWidget(self.export_path_ui, stretch=4)
-        hBoxLayout_2.addWidget(BodyLabel('As of Date:'), stretch=1)
-        hBoxLayout_2.addWidget(self.date_ui, stretch=2)
-        hBoxLayout_3.addWidget(BodyLabel('Client:'), stretch=1)
-        hBoxLayout_3.addWidget(self.client_ui, stretch=2)
-        hBoxLayout_4 = QHBoxLayout()
-        hBoxLayout_4.addLayout(hBoxLayout_2)
-        hBoxLayout_4.addLayout(hBoxLayout_3)
-        self.addLayout(hBoxLayout_1)
-        self.addLayout(hBoxLayout_4)
-        hBoxLayout_5 = QHBoxLayout()
-        hBoxLayout_5.addWidget(BodyLabel('Funds:'), stretch=1)
-        hBoxLayout_5.addWidget(self.funds_ui, stretch=4)
-        self.addLayout(hBoxLayout_5)
-
-        self.addStretch()
-
-    def update_para(self):
-        self.export_path = self.export_path_ui.text()
-        self.date = self.date_ui.getDate().toString('yyyy-MM-dd')
-        self.client = self.client_ui.text()
-        self.funds = re.findall(r'\b[A-Za-z0-9]+\b', self.funds_ui.text())
-
-    def set_read_only(self):
-        self.export_path_ui.setEnabled(False)
-        self.funds_ui.setEnabled(False)
-        self.date_ui.setEnabled(False)
-        self.client_ui.setEnabled(False)
-
-    def set_editable(self):
-        self.export_path_ui.setEnabled(True)
-        self.funds_ui.setEnabled(True)
-        self.date_ui.setEnabled(True)
-        self.client_ui.setEnabled(True)
-
-
-class EngDatePicker(DatePicker):
-    """ English date picker """
-
-    def __init__(self, parent=None):
-        super().__init__(parent, DatePicker.YYYY_MM_DD)
-        self.MONTH = "Month"
-        self.YEAR = "Year"
-        self.DAY = "Day"
-        self.setDateFormat(self.YYYY_MM_DD)
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    app.exec_()
-
-myrts_handler.py
-
-import requests
 
 class MyRTSHandler:
-    def __init__(self, username, password):
-        self.username = username
-        self.password = password
-        self.session = requests.Session()
+    def __init__(self):
+        self.session = None
         self.is_signed = False
-        self.login()
 
-    def login(self):
-        self.is_signed = True
-        return
-
+    async def login(self, username, password):
+        """异步登录方法"""
+        self.session = aiohttp.ClientSession()
         login_url = 'https://myrts.com/login'
         login_data = {
-            'username': self.username,
-            'PASSWORD': self.password
+            'username': username,
+            'password': password
         }
-        res = self.session.post(login_url, data=login_data)
+        
+        async with self.session.post(login_url, data=login_data) as response:
+            # 根据实际登录成功的条件判断
+            if response.status == 200:
+                self.is_signed = True
 
-        if 'Set-Cookie' in res.headers.keys():
-            self.is_signed = True
+    async def close(self):
+        """关闭会话"""
+        await self.session.close()
 
-    def download_45days_csv(self,
-                            export_path='',
-                            date='',
-                            funds=None,
-                            client=''):
-        url = 'https://cloud.statestr.com/ratweb/export'
-        form_data = {
-            'exportType': 'csv',
-            'date': date,
-            'funds': funds,
-            'client': client,
-            'exportPath': export_path
-        }
+    async def _download_file(self, semaphore, url, form_data, file_path):
+        """异步下载单个文件"""
+        async with semaphore:  # 控制并发量
+            for retry in range(2):
+                try:
+                    async with self.session.post(url, data=form_data) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            async with aiofiles.open(file_path, 'wb') as f:
+                                await f.write(content)
+                            return True
+                except Exception as e:
+                    if retry == 1:
+                        print(f"Failed to download {file_path}: {str(e)}")
+                    continue
+        return False
 
-        res = self.session.post(url, data=form_data)
+    async def download_45days_csv(self,
+                                export_path='',
+                                date='',
+                                funds: list = None,
+                                concurrency=20):
+        """异步批量下载文件"""
+        if not funds:
+            return
 
-        # save the file
-        with open(export_path, 'wb') as f:
-            f.write(res.content)
+        url = 'https://myrts.com/export'
+        semaphore = asyncio.Semaphore(concurrency)  # 控制并发数量
+        tasks = []
 
-'''
+        # 确保输出目录存在
+        os.makedirs(export_path, exist_ok=True)
+
+        for fund in funds:
+            if not fund or len(fund) != 4:
+                continue
+
+            # 构造表单数据
+            form_data_1 = {'__para': f'fundcode={fund}&date={date}', '__request': '603'}
+            form_data_2 = {'__para': f'fundcode={fund}&date={date}', '__request': '605'}
+
+            # 创建下载任务
+            for form_data, suffix in [(form_data_1, f'Dtl_{fund}.csv'), 
+                                   (form_data_2, f'{fund}.csv')]:
+                file_path = os.path.join(export_path, suffix)
+                task = self._download_file(
+                    semaphore=semaphore,
+                    url=url,
+                    form_data=form_data,
+                    file_path=file_path
+                )
+                tasks.append(task)
+
+        # 批量执行所有任务
+        await asyncio.gather(*tasks)
+
+
+# 使用示例
+async def main():
+    handler = MyRTSHandler()
+    await handler.login('your_username', 'your_password')
+    
+    # 假设这是你的基金列表
+    funds_list = ['0001', '0002', '0003', ...]  # 你的基金代码
+    
+    await handler.download_45days_csv(
+        export_path='./downloads',
+        date='2023-01-01',
+        funds=funds_list,
+        concurrency=20  # 根据服务器承受能力调整
+    )
+    
+    await handler.close()
+
+if __name__ == '__main__':
+    asyncio.run(main())
