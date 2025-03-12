@@ -1,355 +1,40 @@
-下面给出一种基于 asyncio、aiohttp 和 qasync 的改写方案，主要思路是：
+import asyncio
 
-- 修改 MyRTSHandler，使其内部使用 aiohttp.ClientSession，并将 login 与 download_45days_csv 方法改写为 async 函数  
-- 在登录窗口和主窗口中，使用 @asyncSlot 装饰器实现异步槽函数，直接 await 调用相应的 MyRTSHandler 方法  
-- 利用 qasync 将 Qt 事件循环转换为 asyncio 事件循环，保证异步代码和 UI 协同工作
+async def download_45days_csv(self, export_path='', date='', funds: list = None, client=None):
+    url = 'https://myrts.com/export'
+    if funds is None:
+        funds = []
+    
+    tasks = []
+    for fund in funds:
+        if not fund or len(fund) != 4:
+            continue
 
-下面给出三个脚本的改写示例。
-
----
-
-### 1. myrts_handler 模块（myrts_handler.py）
-
-```python
-import aiohttp
-import os
-
-class MyRTSHandler:
-    def __init__(self):
-        self.session = None
-        self.is_signed = False
-
-    async def login(self, username, password):
-        self.session = aiohttp.ClientSession()
-        login_url = 'https://myrts.com/login'
-        login_data = {
-            'username': username,
-            'password': password
+        form_data_1 = {
+            '__para': f'fundcode={fund}&date={date}',
+            '__request': '603'
         }
-        async with self.session.post(login_url, data=login_data) as res:
-            # 这里假设返回状态200且响应头中包含Set-Cookie表示登录成功
-            if res.status == 200 and 'Set-Cookie' in res.headers:
-                self.is_signed = True
-            else:
-                self.is_signed = False
+        form_data_2 = {
+            '__para': f'fundcode={fund}&date={date}',
+            '__request': '605'
+        }
 
-    async def download_45days_csv(self, export_path='', date='', funds: list = None, client=None):
-        url = 'https://myrts.com/export'
-        if funds is None:
-            funds = []
-        for fund in funds:
-            if not fund or len(fund) != 4:
-                continue
-
-            form_data_1 = {
-                '__para': f'fundcode={fund}&date={date}',
-                '__request': '603'
-            }
-            form_data_2 = {
-                '__para': f'fundcode={fund}&date={date}',
-                '__request': '605'
-            }
-
-            targets = [
-                {'file_name': f'Dtl_{fund}.csv', 'form_data': form_data_1},
-                {'file_name': f'{fund}.csv', 'form_data': form_data_2}
-            ]
-            
-            for target in targets:
-                file_path = os.path.join(export_path, target['file_name'])
-                for retry in range(2):
-                    async with self.session.post(url, data=target['form_data']) as res:
-                        if res.status == 200:
-                            content = await res.read()
-                            with open(file_path, 'wb') as f:
-                                f.write(content)
-                        break
-
-    async def close(self):
-        if self.session:
-            await self.session.close()
-```
-
----
-
-### 2. 登录窗口（LoginWindow）
-
-在登录窗口中，我们使用 asyncSlot 来调用异步的 login 方法，登录成功后关闭当前窗口并打开主界面。注意不再需要通过 Worker 将任务放入线程池，而是直接 await 调用。
-
-```python
-import os
-import sys
-import asyncio
-from PySide2.QtCore import Qt
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout
-from qfluentwidgets import (LineEdit, PasswordLineEdit, BodyLabel, PushButton,
-                            TitleLabel, InfoBar, InfoBarPosition, IndeterminateProgressBar)
-from qframelesswindow import FramelessWindow
-from qasync import QEventLoop, asyncSlot
-
-from myrts_handler.myrts_handler import MyRTSHandler
-from main_window import MainWindow
-
-class LoginWindow(FramelessWindow):
-    def __init__(self):
-        super().__init__()
-        self.initWindow()
-        self.myrts_handler = None
-
-    def initWindow(self):
-        self.resize(300, 200)
-        desktop = QApplication.screens()[0].availableGeometry()
-        w, h = desktop.width(), desktop.height()
-        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
-
-        self.vBoxLayout = QVBoxLayout(self)
-        self.hBoxLayout_1 = QHBoxLayout()
-        self.hBoxLayout_2 = QHBoxLayout()
-        self.username = LineEdit(self)
-        self.password = PasswordLineEdit(self)
-        self.username.setText(os.getlogin())
-        self.username.setReadOnly(True)
-
-        self.login_button = PushButton('Submit', self)
-        self.vBoxLayout.setContentsMargins(30, 30, 30, 30)
-        self.vBoxLayout.setSpacing(20)
-        _title = TitleLabel('Login to MYRTS')
-        _title.setFont(QFont('Times New Roman', 16))
-        _title.setStyleSheet("color: #000063")
-        self.vBoxLayout.addWidget(_title)
-        self.hBoxLayout_1.addWidget(BodyLabel('User ID:'), stretch=1)
-        self.hBoxLayout_1.addWidget(self.username, stretch=4)
-        self.hBoxLayout_2.addWidget(BodyLabel('Passcode:'), stretch=1)
-        self.hBoxLayout_2.addWidget(self.password, stretch=4)
-        self.vBoxLayout.addLayout(self.hBoxLayout_1)
-        self.vBoxLayout.addLayout(self.hBoxLayout_2)
-        self.vBoxLayout.addWidget(self.login_button)
-
-        self.inProgressBar = IndeterminateProgressBar(self)
-        self.vBoxLayout.addWidget(self.inProgressBar)
-        self.inProgressBar.stop()
-
-        self.login_button.clicked.connect(self.on_login_clicked)
-
-    @asyncSlot()
-    async def on_login_clicked(self):
-        if not self.password.text():
-            self.createWarningInfoBar('Enter passcode', 'Please enter PIN + TOKEN as passcode')
-            return
-
-        self.inProgressBar.start()
-        self.login_button.setEnabled(False)
-        self.login_button.setText('Logging in...')
-
-        # 创建 MyRTSHandler 实例并异步登录
-        self.myrts_handler = MyRTSHandler()
-        await self.myrts_handler.login(self.username.text(), self.password.text())
-
-        self.inProgressBar.stop()
-        self.login_button.setEnabled(True)
-        self.login_button.setText('Submit')
-
-        if self.myrts_handler.is_signed:
-            self.close()
-            self.main_window = MainWindow()
-            self.main_window.myrts_handler = self.myrts_handler
-            self.main_window.show()
-        else:
-            self.createErrorInfoBar("Login failed", title="Authentication Error")
-
-    def createWarningInfoBar(self, title, content):
-        InfoBar.warning(
-            title=title,
-            content=content,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP_LEFT,
-            duration=2000,
-            parent=self
-        )
-
-    def createErrorInfoBar(self, content, title='Unknown Error'):
-        InfoBar.error(
-            title=title,
-            content=content,
-            orient=Qt.Vertical,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            duration=-1,
-            parent=self
-        )
-
-if __name__ == '__main__':
-    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-
-    app = QApplication(sys.argv)
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
-    window = LoginWindow()
-    window.show()
-    with loop:
-        loop.run_forever()
-```
-
----
-
-### 3. 主窗口与下载功能（MainWindow）
-
-在主窗口中，同样使用 asyncSlot 来处理下载任务。这里我们对每个下载单元（DownloadUnit）构造一个异步任务，并用 asyncio.gather 等待全部完成。
-
-```python
-import os
-import sys
-import re
-import asyncio
-from PySide2.QtCore import Qt
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QCompleter
-from qfluentwidgets import (LineEdit, BodyLabel, IndeterminateProgressBar, PrimaryPushButton,
-                            DatePicker, SearchLineEdit)
-from qframelesswindow import FramelessWindow
-from qasync import asyncSlot
-
-class MainWindow(FramelessWindow):
-    def __init__(self):
-        super().__init__()
-        self.myrts_handler = None
-        self.initWindow()
-        self.downloaders = []
-        self.running_tasks = 0
-
-    def initWindow(self):
-        self.resize(700, 500)
-        desktop = QApplication.screens()[0].availableGeometry()
-        w, h = desktop.width(), desktop.height()
-        self.move(w // 2 - self.width() // 2, h // 2 - self.height() // 2)
-
-        self.vBoxLayout_1 = QVBoxLayout(self)
-        self.downloaders = []
-        download1 = DownloadUnit()
-        self.downloaders.append(download1)
-        self.download_button = PrimaryPushButton('Download', self)
-
-        for downloader in self.downloaders:
-            self.vBoxLayout_1.addLayout(downloader)
-
-        self.inProgressBar = IndeterminateProgressBar(self)
-        self.vBoxLayout_1.addWidget(self.inProgressBar)
-        self.vBoxLayout_1.addWidget(self.download_button)
-
-        self.inProgressBar.stop()
-        self.download_button.clicked.connect(self.on_download_clicked)
-
-    @asyncSlot()
-    async def on_download_clicked(self):
-        self.download_button.setEnabled(False)
-        self.download_button.setText('Downloading...')
-        self.inProgressBar.start()
-
-        tasks = []
-        for downloader in self.downloaders:
-            downloader.update_para()
-            downloader.set_read_only()
-            tasks.append(asyncio.create_task(self.download(downloader)))
+        targets = [
+            {'file_name': f'Dtl_{fund}.csv', 'form_data': form_data_1},
+            {'file_name': f'{fund}.csv', 'form_data': form_data_2}
+        ]
         
-        await asyncio.gather(*tasks)
+        for target in targets:
+            file_path = os.path.join(export_path, target['file_name'])
+            tasks.append(self._download_file(url, target['form_data'], file_path))
+    
+    # 并行执行所有任务
+    await asyncio.gather(*tasks)
 
-        self.inProgressBar.stop()
-        self.download_button.setEnabled(True)
-        self.download_button.setText('Download')
-
-    async def download(self, downloader):
-        await self.myrts_handler.download_45days_csv(export_path=downloader.export_path,
-                                                      date=downloader.date,
-                                                      funds=downloader.funds,
-                                                      client=downloader.client)
-
-class DownloadUnit(QVBoxLayout):
-    def __init__(self):
-        super().__init__()
-        self.setSpacing(1)
-        self.setContentsMargins(15, 15, 15, 15)
-        self.export_path_ui = LineEdit()
-        self.funds_ui = LineEdit()
-        self.date_ui = EngDatePicker()
-
-        self.client_ui = SearchLineEdit()
-        self.client_ui.setPlaceholderText('Type a client name')
-        self.client_ui.setClearButtonEnabled(True)
-        self.client_ui.setFixedWidth(230)
-        clients = ["Russell", "ARTSUPER"]
-        completer = QCompleter(clients, self.client_ui)
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self.client_ui.setCompleter(completer)
-
-        hBoxLayout_1 = QHBoxLayout()
-        hBoxLayout_2 = QHBoxLayout()
-        hBoxLayout_3 = QHBoxLayout()
-        hBoxLayout_1.addWidget(BodyLabel('Export Path:'), stretch=1)
-        hBoxLayout_1.addWidget(self.export_path_ui, stretch=4)
-        hBoxLayout_2.addWidget(BodyLabel('As of Date:'), stretch=1)
-        hBoxLayout_2.addWidget(self.date_ui, stretch=2)
-        hBoxLayout_3.addWidget(BodyLabel('Client:'), stretch=1)
-        hBoxLayout_3.addWidget(self.client_ui, stretch=2)
-        hBoxLayout_4 = QHBoxLayout()
-        hBoxLayout_4.addLayout(hBoxLayout_2)
-        hBoxLayout_4.addLayout(hBoxLayout_3)
-        self.addLayout(hBoxLayout_1)
-        self.addLayout(hBoxLayout_4)
-        hBoxLayout_5 = QHBoxLayout()
-        hBoxLayout_5.addWidget(BodyLabel('Funds:'), stretch=1)
-        hBoxLayout_5.addWidget(self.funds_ui, stretch=4)
-        self.addLayout(hBoxLayout_5)
-        self.addStretch()
-
-    def update_para(self):
-        self.export_path = self.export_path_ui.text()
-        self.date = self.date_ui.getDate().toString('yyyy-MM-dd')
-        self.client = self.client_ui.text()
-        self.funds = re.findall(r'\b[A-Za-z0-9]+\b', self.funds_ui.text())
-
-    def set_read_only(self):
-        self.export_path_ui.setEnabled(False)
-        self.funds_ui.setEnabled(False)
-        self.date_ui.setEnabled(False)
-        self.client_ui.setEnabled(False)
-
-    def set_editable(self):
-        self.export_path_ui.setEnabled(True)
-        self.funds_ui.setEnabled(True)
-        self.date_ui.setEnabled(True)
-        self.client_ui.setEnabled(True)
-
-class EngDatePicker(DatePicker):
-    """ English date picker """
-    def __init__(self, parent=None):
-        super().__init__(parent, DatePicker.YYYY_MM_DD)
-        self.MONTH = "Month"
-        self.YEAR = "Year"
-        self.DAY = "Day"
-        self.setDateFormat(self.YYYY_MM_DD)
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    app.exec_()
-```
-
----
-
-### 关键说明
-
-- **异步网络请求**  
-  MyRTSHandler 内部采用 aiohttp 进行异步请求，login 和 download_45days_csv 都被改为 async 函数。登录时通过判断响应状态和响应头中的 Set-Cookie 来标识是否登录成功（你可以根据实际情况调整判断逻辑）。
-
-- **qasync 集成**  
-  在登录窗口中，通过 QEventLoop(app) 将 Qt 事件循环转换为 asyncio 事件循环，再配合 @asyncSlot 使用 async/await 编写异步槽函数，保证 UI 不阻塞。
-
-- **任务调度**  
-  主窗口的下载按钮点击后，会为每个下载单元创建一个异步任务，并利用 asyncio.gather 等待全部任务完成，最后恢复 UI 状态。
-
-以上代码仅为示例，你可能需要根据实际情况（例如错误处理、文件路径检查、登录接口返回的数据格式等）做进一步调整。
+async def _download_file(self, url, form_data, file_path):
+    # 如果需要重试，可以在这里添加重试逻辑
+    async with self.session.post(url, data=form_data) as res:
+        if res.status == 200:
+            content = await res.read()
+            with open(file_path, 'wb') as f:
+                f.write(content)
