@@ -1,106 +1,49 @@
-是的，用 Python + PySide2 搭建一个简化的 SQLite 浏览器（仅支持查询功能） 是完全可行的。这种工具的架构其实很简单，主要包括：
-
-⸻
-
-功能目标
-	1.	SQL 输入框：用户可以输入任意 SQL 查询语句（只读，如 SELECT）。
-	2.	结果显示区：显示 SQL 查询返回的结果（以表格形式）。
-	3.	数据库连接选择（可选）：简单选择或硬编码数据库文件路径。
-
-⸻
-
-界面结构
-
-一个典型的 PySide2 UI 可以这么设计：
-
-+-----------------------------------------------+
-| SQL 输入框（QTextEdit 或 QPlainTextEdit）     |
-+-----------------------------------------------+
-| 执行按钮（QPushButton）                       |
-+-----------------------------------------------+
-| 查询结果显示表（QTableView + QSqlTableModel）|
-+-----------------------------------------------+
-
-
-⸻
-
-技术点说明
-	•	使用 SQLite（sqlite3 模块）执行查询。
-	•	使用 QTableView + QStandardItemModel 显示查询结果。
-	•	UI 使用 PySide2（Qt for Python） 搭建。
-	•	可选：对非 SELECT 操作进行限制（不执行 INSERT/UPDATE/DELETE）。
-
-⸻
-
-简单代码框架（核心功能）
-
-import sys
-import sqlite3
 from PySide2.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton,
-    QTextEdit, QTableView, QMessageBox
+    QApplication, QWidget, QVBoxLayout,
+    QTextEdit, QPushButton, QTableView, QMessageBox
 )
-from PySide2.QtGui import QStandardItemModel, QStandardItem
+from PySide2.QtSql import QSqlDatabase, QSqlQueryModel
 
-class SQLiteBrowser(QWidget):
-    def __init__(self, db_path):
+class SQLQueryTool(QWidget):
+    def __init__(self):
         super().__init__()
-        self.setWindowTitle("简易 SQLite 浏览器")
-        self.conn = sqlite3.connect(db_path)
-        
-        self.query_edit = QTextEdit()
-        self.query_edit.setPlaceholderText("请输入 SELECT 查询语句...")
-        self.execute_button = QPushButton("执行查询")
-        self.execute_button.clicked.connect(self.run_query)
+        self.setWindowTitle("数据库查询工具")
+        self.resize(800, 600)
+
+        self.query_input = QTextEdit()
+        self.query_input.setPlaceholderText("请输入 SQL 查询语句...")
+
+        self.run_button = QPushButton("执行查询")
+        self.run_button.clicked.connect(self.run_query)
 
         self.table_view = QTableView()
-        self.model = QStandardItemModel()
+        self.model = QSqlQueryModel()
         self.table_view.setModel(self.model)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.query_edit)
-        layout.addWidget(self.execute_button)
+        layout.addWidget(self.query_input)
+        layout.addWidget(self.run_button)
         layout.addWidget(self.table_view)
+
         self.setLayout(layout)
 
-    def run_query(self):
-        query = self.query_edit.toPlainText().strip()
-        if not query.lower().startswith("select"):
-            QMessageBox.warning(self, "限制", "只允许 SELECT 查询")
-            return
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute(query)
-            results = cursor.fetchall()
-            headers = [desc[0] for desc in cursor.description]
+        self.init_db()
 
-            self.model.clear()
-            self.model.setHorizontalHeaderLabels(headers)
-            for row in results:
-                items = [QStandardItem(str(field)) for field in row]
-                self.model.appendRow(items)
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
+    def init_db(self):
+        self.db = QSqlDatabase.addDatabase("QSQLITE")  # 或者 "QMYSQL", "QPSQL"
+        self.db.setDatabaseName("example.db")  # 你的 SQLite 文件
+        if not self.db.open():
+            QMessageBox.critical(self, "错误", "数据库连接失败")
+    
+    def run_query(self):
+        query_text = self.query_input.toPlainText()
+        self.model.setQuery(query_text)
+        if self.model.lastError().isValid():
+            QMessageBox.critical(self, "查询错误", self.model.lastError().text())
 
 if __name__ == "__main__":
+    import sys
     app = QApplication(sys.argv)
-    db_path = "example.db"  # 修改为你的 SQLite 路径
-    window = SQLiteBrowser(db_path)
-    window.resize(800, 600)
+    window = SQLQueryTool()
     window.show()
     sys.exit(app.exec_())
-
-
-⸻
-
-扩展建议（非必须）
-	•	文件选择器选择 .db 文件。
-	•	查询历史保存（用 QListWidget）。
-	•	导出查询结果为 CSV。
-	•	自动提示 SQL 表名（高级功能）。
-
-⸻
-
-总结
-
-这个小工具非常适合作为练手项目或实际轻量使用，使用 PySide2 来做 UI，美观且跨平台。实现起来比完整的数据库管理工具简单得多。如果你需要，我可以帮你打包成 .exe 或者继续完善界面。是否需要继续开发这个？
