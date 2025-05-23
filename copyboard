@@ -1,10 +1,9 @@
-Intended Use
+Upon launching the application, users are prompted with a login interface. The first step is to select the intended role: Preparer or Reviewer.
+	•	Preparer: Responsible for parsing and uploading master rate data from approved source files.
+	•	Reviewer: Authorized to review and batch-approve multiple master rate records within the system.
 
-This application is developed to support the automated processing and maintenance of designated master rate data within the DMH platform. It is specifically designed to handle source files originating from authorized High Trust Systems. Upon execution, the application performs the following actions:
-	•	Automatically parses the input source files to extract relevant master rate information.
-	•	Validates and uploads the parsed data to the appropriate master rate module within the DMH platform.
-	•	Archives the original source files as backup in a preconfigured storage location for traceability and audit purposes.
+Once a role is selected, the user’s Enterprise ID (EID) is automatically detected and pre-filled in the User ID field. This field is non-editable to ensure secure, identity-bound access—each user can only access the application with their own credentials.
 
-In addition to automated processing, the application includes a review module that enables authorized reviewers to securely log in and efficiently perform batch approvals of multiple master rate entries through a streamlined interface.
+The user must then enter a passcode, which typically includes a concatenated token (as required by DM protocols), and click Submit to complete the login process.
 
-This software is intended for use in enterprise environments where data integrity, auditability, and process automation are critical to operational efficiency.
+This authentication step ensures role-based access control and enforces identity verification in alignment with organizational security standards.
