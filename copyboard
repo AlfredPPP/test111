@@ -1,49 +1,10 @@
-from PySide2.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout,
-    QTextEdit, QPushButton, QTableView, QMessageBox
-)
-from PySide2.QtSql import QSqlDatabase, QSqlQueryModel
+Intended Use
 
-class SQLQueryTool(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("数据库查询工具")
-        self.resize(800, 600)
+This application is developed to support the automated processing and maintenance of designated master rate data within the DMH platform. It is specifically designed to handle source files originating from authorized High Trust Systems. Upon execution, the application performs the following actions:
+	•	Automatically parses the input source files to extract relevant master rate information.
+	•	Validates and uploads the parsed data to the appropriate master rate module within the DMH platform.
+	•	Archives the original source files as backup in a preconfigured storage location for traceability and audit purposes.
 
-        self.query_input = QTextEdit()
-        self.query_input.setPlaceholderText("请输入 SQL 查询语句...")
+In addition to automated processing, the application includes a review module that enables authorized reviewers to securely log in and efficiently perform batch approvals of multiple master rate entries through a streamlined interface.
 
-        self.run_button = QPushButton("执行查询")
-        self.run_button.clicked.connect(self.run_query)
-
-        self.table_view = QTableView()
-        self.model = QSqlQueryModel()
-        self.table_view.setModel(self.model)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.query_input)
-        layout.addWidget(self.run_button)
-        layout.addWidget(self.table_view)
-
-        self.setLayout(layout)
-
-        self.init_db()
-
-    def init_db(self):
-        self.db = QSqlDatabase.addDatabase("QSQLITE")  # 或者 "QMYSQL", "QPSQL"
-        self.db.setDatabaseName("example.db")  # 你的 SQLite 文件
-        if not self.db.open():
-            QMessageBox.critical(self, "错误", "数据库连接失败")
-    
-    def run_query(self):
-        query_text = self.query_input.toPlainText()
-        self.model.setQuery(query_text)
-        if self.model.lastError().isValid():
-            QMessageBox.critical(self, "查询错误", self.model.lastError().text())
-
-if __name__ == "__main__":
-    import sys
-    app = QApplication(sys.argv)
-    window = SQLQueryTool()
-    window.show()
-    sys.exit(app.exec_())
+This software is intended for use in enterprise environments where data integrity, auditability, and process automation are critical to operational efficiency.
