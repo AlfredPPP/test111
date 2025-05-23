@@ -1,9 +1,15 @@
-Upon launching the application, users are prompted with a login interface. The first step is to select the intended role: Preparer or Reviewer.
-	•	Preparer: Responsible for parsing and uploading master rate data from approved source files.
-	•	Reviewer: Authorized to review and batch-approve multiple master rate records within the system.
+After successful login, users are required to specify the Source Folder Path by pasting it into the designated input field, as illustrated in the screenshot below.
 
-Once a role is selected, the user’s Enterprise ID (EID) is automatically detected and pre-filled in the User ID field. This field is non-editable to ensure secure, identity-bound access—each user can only access the application with their own credentials.
+The selected folder should contain all source files intended for processing in the current session. Each source file is expected to correspond to a single master rate record.
 
-The user must then enter a passcode, which typically includes a concatenated token (as required by DM protocols), and click Submit to complete the login process.
+Note: The application currently supports only Excel files (.xlsx) as valid input sources.
 
-This authentication step ensures role-based access control and enforces identity verification in alignment with organizational security standards.
+Please refer to the following screenshots for an example of the user interface and the expected folder structure.
+
+⸻
+
+你之后添加截图时，可以简单地标注为：
+	•	Screenshot 1: Application UI – Source Folder Input
+	•	Screenshot 2: Example Folder Content
+
+如果你还有 Step 3，继续发过来我可以帮你统一
