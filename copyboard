@@ -1,15 +1,11 @@
-After successful login, users are required to specify the Source Folder Path by pasting it into the designated input field, as illustrated in the screenshot below.
+After successful login, users are required to specify the Source Folder Path by pasting it into the input field marked as [1] in the screenshot below.
 
 The selected folder should contain all source files intended for processing in the current session. Each source file is expected to correspond to a single master rate record.
 
+Once the path has been entered, click the Submit button located to the right of the input field ([2]). The application will begin parsing the files, which may take some time depending on the number and size of the files.
+
+Upon successful parsing, a summary table will populate below, displaying the extracted master rate information for each source file.
+
 Note: The application currently supports only Excel files (.xlsx) as valid input sources.
 
-Please refer to the following screenshots for an example of the user interface and the expected folder structure.
-
-⸻
-
-你之后添加截图时，可以简单地标注为：
-	•	Screenshot 1: Application UI – Source Folder Input
-	•	Screenshot 2: Example Folder Content
-
-如果你还有 Step 3，继续发过来我可以帮你统一
+Refer to the following screenshots for an example of the user interface and the expected folder structure.
