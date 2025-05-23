@@ -1,32 +1,55 @@
-Step 3: Retrieve CUSIP and Perform Data Validation
-
-Once the initial parsing is complete and the preliminary data table is displayed (as described in Step 2), users should click the Get CUSIP button to initiate the next phase of validation and enrichment.
-
-Upon clicking Get CUSIP, the application performs the following actions:
-	•	Automatically queries the DMH platform using the UR code to retrieve corresponding Asset IDs from the Fund Setup and Class Setup modules.
-	•	Displays the retrieved Asset IDs directly in the data table.
-	•	Filters and unchecks invalid entries based on a set of business rules. Data rows may be excluded for reasons including:
-	•	Duplicate master rate information found in multiple source files.
-	•	File corruption or non-compliance with the expected High Trust System format.
-	•	Inconsistencies between DPU values in the source file and those in the DMH master rate database.
-	•	Variance thresholds being exceeded during validation.
-
-Only rows that remain checked after this process are considered valid and ready for upload to DMH. All others are automatically deselected to prevent erroneous data submission.
+Reviewer Interface
 
 ⸻
 
-Step 4: Upload to DMH and Final Review
+Step 1: Login as Reviewer
 
-To submit the validated data, users must click the Upload Data button. The application will then attempt to upload all currently selected rows to the DMH Master Rate system.
+To access the review functionality, users should log in by selecting the Reviewer role at the login screen. The authentication process remains the same as described in the Preparer interface.
 
-For each record, the Status column in the data table will display the result of the upload:
-	•	Success: The data was uploaded successfully and should now be visible in DMH as a Pending Approval entry.
-	•	Failure: The upload was not successful. The status column will show the specific error (e.g., excessive variance, invalid data structure, or unknown system error).
+⸻
 
-In case of failure, users should manually investigate the corresponding record by referencing the Asset ID, and may need to update the DMH Master Rate directly.
+Step 2: Load Pending Approval Data
 
-To support troubleshooting:
-	•	The View Log button (located in the bottom-left corner of the interface) allows users to access runtime logs for detailed error tracking. These logs can be shared with the development team for further assistance.
-	•	The Restart button (next to View Log) allows users to reset the application state and repeat the entire process from Step 1, without requiring re-authentication.
+After logging in, the reviewer is presented with a data table displaying pending approval records. These records are exclusively sourced from the Prepare Interface—specifically, only data that was:
+	•	Successfully parsed,
+	•	Validated,
+	•	And uploaded to DMH via the Upload Data button,
+will appear in this view.
 
-This concludes all the core functionality available within the Preparer Interface.
+Note:
+	•	Records manually saved directly in DMH are not visible here.
+	•	Data that was deselected during the Prepare phase (due to validation issues, failed parsing, or upload errors) will also not be shown.
+
+To ensure data integrity before taking any approval action, reviewers must click the Sync with DMH button (located in the bottom-left corner). This triggers a real-time status check on each record against the DMH platform.
+
+The synchronization logic compares the current Update Time of each DMH record (fetched via its unique Row ID) with the timestamp recorded at the time of the original upload by the preparer. If a mismatch is detected—indicating that the record has been modified externally since upload—the application will automatically uncheck the affected row.
+
+These unchecked records require manual inspection in DMH and cannot be batch approved through this interface.
+
+⸻
+
+Step 3: Approve Selected Records
+
+Once synchronization is complete and data integrity is verified, the reviewer can click the Approve button.
+
+All currently selected (i.e., checked) rows will be submitted for approval in DMH. If successful, the corresponding master rate records in DMH will:
+	•	Transition from Pending Approval to Approved status, and
+	•	Trigger the automatic Reprocess Job, which will clear any related exceptions.
+
+⸻
+
+Step 4: Delete Estimate Records (Optional)
+
+The Reviewer Interface also provides a Delete EST (Delete Estimate) button, designed to clean up legacy estimate entries in DMH after the approval of new actual data.
+
+This function adheres to the following rules:
+	•	Only records with approved actual data will have their corresponding estimate entries deleted.
+	•	If a selected row has not been approved yet, the delete operation will be ignored for that row, even if it is selected.
+
+This ensures that estimate data is only removed when the corresponding actual values have been fully validated and accepted.
+
+⸻
+
+Conclusion
+
+These steps complete the Reviewer Interface workflow. Additional tools such as View Log and Restart (shared with the Preparer interface) are available for error diagnosis and workflow reset if needed.
