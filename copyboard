@@ -29,36 +29,57 @@ class TreeWithFundCodeFilter(QMainWindow):
         self.checked_ids.clear()
 
         if not input_text:
-            return  # 输入为空，不展示任何节点
+            return
 
         fundcodes = [code.strip() for code in input_text.split(',') if code.strip()]
-        matched_parents = []
+        matched_roots = []
 
-        # 遍历所有父节点进行匹配
-        for item in self.full_data:
-            matched = False
-            parent = dict(item)  # 深拷贝
-            parent['entities'] = []
+        for code in fundcodes:
+            matched_nodes = self.find_matching_paths(self.full_data, code)
+            for path in matched_nodes:
+                self.merge_path_into_tree(matched_roots, path)
 
-            # 父节点匹配
-            if item.get('shortName') in fundcodes:
-                parent['entities'] = item['entities']  # 全部子节点
-                matched = True
-                self.add_ids_recursively(item, check_all=True)
+        # 构建树（只显示匹配部分）
+        self.build_tree(matched_roots, self.tree.invisibleRootItem())
 
-            else:
-                # 查找子节点匹配
-                for child in item.get('entities', []):
-                    if child.get('shortName') in fundcodes:
-                        parent['entities'].append(child)
-                        matched = True
-                        self.checked_ids.add(child['id'])
+    def find_matching_paths(self, nodes, code, path=None):
+        """
+        递归查找所有匹配 `shortName == code` 的路径列表，每个路径是一条从 root 到匹配节点的列表。
+        """
+        if path is None:
+            path = []
 
-            if matched:
-                matched_parents.append(parent)
+        results = []
+        for node in nodes:
+            current_path = path + [node]
+            if node.get('shortName') == code:
+                results.append(current_path)
+                # 如果是组，默认也选中它的所有子节点
+                self.add_ids_recursively(node, check_all=True)
+            elif 'entities' in node:
+                child_results = self.find_matching_paths(node['entities'], code, current_path)
+                results.extend(child_results)
+        return results
 
-        # 构建 Tree UI
-        self.build_tree(matched_parents, self.tree.invisibleRootItem())
+    def merge_path_into_tree(self, tree, path):
+        """
+        将一个匹配路径 merge 到树结构中，避免重复节点。
+        """
+        if not path:
+            return
+
+        root = path[0]
+        for node in tree:
+            if node['id'] == root['id']:
+                # 已存在，递归合并子节点
+                self.merge_path_into_tree(node.setdefault('entities', []), path[1:])
+                return
+
+        # 不存在，复制插入（深拷贝）
+        new_node = dict(root)
+        new_node['entities'] = []
+        tree.append(new_node)
+        self.merge_path_into_tree(new_node['entities'], path[1:])
 
     def build_tree(self, items, parent_item):
         for item in items:
@@ -70,7 +91,6 @@ class TreeWithFundCodeFilter(QMainWindow):
             is_checked = item['id'] in self.checked_ids
             tree_item.setCheckState(0, Qt.Checked if is_checked else Qt.Unchecked)
 
-            # 构建子树
             self.build_tree(item.get('entities', []), tree_item)
 
     def handle_item_changed(self, item, column):
@@ -85,9 +105,8 @@ class TreeWithFundCodeFilter(QMainWindow):
         else:
             self.checked_ids.discard(item_id)
 
-        # 递归更新子节点
         self.update_children_checkstate(item, state)
-        print("✅ 当前勾选的 ID:", self.checked_ids)
+        print("✅ 当前勾选 ID:", self.checked_ids)
 
     def update_children_checkstate(self, item, state):
         for i in range(item.childCount()):
@@ -100,7 +119,7 @@ class TreeWithFundCodeFilter(QMainWindow):
                 self.checked_ids.discard(child_id)
             self.update_children_checkstate(child, state)
 
-    def add_ids_recursively(self, node, check_all=False):
+    def add_ids_recursively(self, node, check_all=True):
         """递归加入所有子节点ID（用于默认勾选）"""
         if check_all or not node.get('isGroup', False):
             self.checked_ids.add(node['id'])
