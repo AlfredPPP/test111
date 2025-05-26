@@ -1,55 +1,69 @@
-Reviewer Interface
+class TreeWithCheckbox(QMainWindow):
+    def __init__(self, data):
+        super().__init__()
+        self.setWindowTitle("Entities Tree")
+        self.checked_ids = set()
 
-⸻
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabel("Entities")
+        self.tree.itemChanged.connect(self.handle_item_changed)
 
-Step 1: Login as Reviewer
+        self.build_tree(data, self.tree.invisibleRootItem())
 
-To access the review functionality, users should log in by selecting the Reviewer role at the login screen. The authentication process remains the same as described in the Preparer interface.
+        layout = QVBoxLayout()
+        layout.addWidget(self.tree)
 
-⸻
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
 
-Step 2: Load Pending Approval Data
+    def build_tree(self, items, parent_item):
+        for item in items:
+            tree_item = QTreeWidgetItem(parent_item)
+            tree_item.setText(0, item['name'])
+            tree_item.setData(0, Qt.UserRole, item['id'])
+            tree_item.setFlags(tree_item.flags() | Qt.ItemIsUserCheckable)
+            tree_item.setCheckState(0, Qt.Unchecked)
 
-After logging in, the reviewer is presented with a data table displaying pending approval records. These records are exclusively sourced from the Prepare Interface—specifically, only data that was:
-	•	Successfully parsed,
-	•	Validated,
-	•	And uploaded to DMH via the Upload Data button,
-will appear in this view.
+            # 递归构建子树
+            self.build_tree(item.get('entities', []), tree_item)
 
-Note:
-	•	Records manually saved directly in DMH are not visible here.
-	•	Data that was deselected during the Prepare phase (due to validation issues, failed parsing, or upload errors) will also not be shown.
+    def handle_item_changed(self, item, column):
+        if column != 0:
+            return
 
-To ensure data integrity before taking any approval action, reviewers must click the Sync with DMH button (located in the bottom-left corner). This triggers a real-time status check on each record against the DMH platform.
+        state = item.checkState(0)
+        item_id = item.data(0, Qt.UserRole)
 
-The synchronization logic compares the current Update Time of each DMH record (fetched via its unique Row ID) with the timestamp recorded at the time of the original upload by the preparer. If a mismatch is detected—indicating that the record has been modified externally since upload—the application will automatically uncheck the affected row.
+        # 更新当前项
+        if state == Qt.Checked:
+            self.checked_ids.add(item_id)
+        else:
+            self.checked_ids.discard(item_id)
 
-These unchecked records require manual inspection in DMH and cannot be batch approved through this interface.
+        # 递归更新子节点
+        self.update_children_checkstate(item, state)
 
-⸻
+        print("✅ 当前已勾选 ID：", self.checked_ids)
 
-Step 3: Approve Selected Records
+    def update_children_checkstate(self, item, state):
+        for i in range(item.childCount()):
+            child = item.child(i)
+            child.setCheckState(0, state)
+            child_id = child.data(0, Qt.UserRole)
 
-Once synchronization is complete and data integrity is verified, the reviewer can click the Approve button.
+            if state == Qt.Checked:
+                self.checked_ids.add(child_id)
+            else:
+                self.checked_ids.discard(child_id)
 
-All currently selected (i.e., checked) rows will be submitted for approval in DMH. If successful, the corresponding master rate records in DMH will:
-	•	Transition from Pending Approval to Approved status, and
-	•	Trigger the automatic Reprocess Job, which will clear any related exceptions.
+            self.update_children_checkstate(child, state)
 
-⸻
 
-Step 4: Delete Estimate Records (Optional)
-
-The Reviewer Interface also provides a Delete EST (Delete Estimate) button, designed to clean up legacy estimate entries in DMH after the approval of new actual data.
-
-This function adheres to the following rules:
-	•	Only records with approved actual data will have their corresponding estimate entries deleted.
-	•	If a selected row has not been approved yet, the delete operation will be ignored for that row, even if it is selected.
-
-This ensures that estimate data is only removed when the corresponding actual values have been fully validated and accepted.
-
-⸻
-
-Conclusion
-
-These steps complete the Reviewer Interface workflow. Additional tools such as View Log and Restart (shared with the Preparer interface) are available for error diagnosis and workflow reset if needed.
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    window = TreeWithCheckbox(sample_data)
+    window.resize(600, 400)
+    window.show()
+    sys.exit(app.exec_())
