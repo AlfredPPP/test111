@@ -1,21 +1,64 @@
-class TreeWithCheckbox(QMainWindow):
-    def __init__(self, data):
+class TreeWithFundCodeFilter(QMainWindow):
+    def __init__(self, full_data):
         super().__init__()
-        self.setWindowTitle("Entities Tree")
+        self.setWindowTitle("Fund Code Tree")
+
+        self.full_data = full_data
         self.checked_ids = set()
+
+        self.input_box = QLineEdit()
+        self.input_box.setPlaceholderText("请输入逗号分隔的FundCode (shortName)")
+        self.input_box.textChanged.connect(self.on_fundcode_input)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabel("Entities")
         self.tree.itemChanged.connect(self.handle_item_changed)
 
-        self.build_tree(data, self.tree.invisibleRootItem())
-
         layout = QVBoxLayout()
+        layout.addWidget(QLabel("基金代码输入:"))
+        layout.addWidget(self.input_box)
         layout.addWidget(self.tree)
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
+
+    def on_fundcode_input(self):
+        input_text = self.input_box.text().strip()
+        self.tree.clear()
+        self.checked_ids.clear()
+
+        if not input_text:
+            return  # 输入为空，不展示任何节点
+
+        fundcodes = [code.strip() for code in input_text.split(',') if code.strip()]
+        matched_parents = []
+
+        # 遍历所有父节点进行匹配
+        for item in self.full_data:
+            matched = False
+            parent = dict(item)  # 深拷贝
+            parent['entities'] = []
+
+            # 父节点匹配
+            if item.get('shortName') in fundcodes:
+                parent['entities'] = item['entities']  # 全部子节点
+                matched = True
+                self.add_ids_recursively(item, check_all=True)
+
+            else:
+                # 查找子节点匹配
+                for child in item.get('entities', []):
+                    if child.get('shortName') in fundcodes:
+                        parent['entities'].append(child)
+                        matched = True
+                        self.checked_ids.add(child['id'])
+
+            if matched:
+                matched_parents.append(parent)
+
+        # 构建 Tree UI
+        self.build_tree(matched_parents, self.tree.invisibleRootItem())
 
     def build_tree(self, items, parent_item):
         for item in items:
@@ -23,9 +66,11 @@ class TreeWithCheckbox(QMainWindow):
             tree_item.setText(0, item['name'])
             tree_item.setData(0, Qt.UserRole, item['id'])
             tree_item.setFlags(tree_item.flags() | Qt.ItemIsUserCheckable)
-            tree_item.setCheckState(0, Qt.Unchecked)
 
-            # 递归构建子树
+            is_checked = item['id'] in self.checked_ids
+            tree_item.setCheckState(0, Qt.Checked if is_checked else Qt.Unchecked)
+
+            # 构建子树
             self.build_tree(item.get('entities', []), tree_item)
 
     def handle_item_changed(self, item, column):
@@ -35,7 +80,6 @@ class TreeWithCheckbox(QMainWindow):
         state = item.checkState(0)
         item_id = item.data(0, Qt.UserRole)
 
-        # 更新当前项
         if state == Qt.Checked:
             self.checked_ids.add(item_id)
         else:
@@ -43,27 +87,31 @@ class TreeWithCheckbox(QMainWindow):
 
         # 递归更新子节点
         self.update_children_checkstate(item, state)
-
-        print("✅ 当前已勾选 ID：", self.checked_ids)
+        print("✅ 当前勾选的 ID:", self.checked_ids)
 
     def update_children_checkstate(self, item, state):
         for i in range(item.childCount()):
             child = item.child(i)
             child.setCheckState(0, state)
             child_id = child.data(0, Qt.UserRole)
-
             if state == Qt.Checked:
                 self.checked_ids.add(child_id)
             else:
                 self.checked_ids.discard(child_id)
-
             self.update_children_checkstate(child, state)
+
+    def add_ids_recursively(self, node, check_all=False):
+        """递归加入所有子节点ID（用于默认勾选）"""
+        if check_all or not node.get('isGroup', False):
+            self.checked_ids.add(node['id'])
+        for child in node.get('entities', []):
+            self.add_ids_recursively(child, check_all)
 
 
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
-    window = TreeWithCheckbox(sample_data)
-    window.resize(600, 400)
+    window = TreeWithFundCodeFilter(sample_data)
+    window.resize(800, 600)
     window.show()
     sys.exit(app.exec_())
