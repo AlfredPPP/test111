@@ -1,136 +1,69 @@
-class TreeWithFundCodeFilter(QMainWindow):
-    def __init__(self, full_data):
-        super().__init__()
-        self.setWindowTitle("Fund Code Tree")
+import os
+import sqlite3
+import requests
 
-        self.full_data = full_data
-        self.checked_ids = set()
+class TemplateDBUpdater:
+    def __init__(self, db_path, base_url):
+        self.db_path = db_path
+        self.base_url = base_url.rstrip('/')  # Remove trailing slash if present
+        self.conn = sqlite3.connect(self.db_path)
+        self.cursor = self.conn.cursor()
+        self._create_table_if_not_exists()
 
-        self.input_box = QLineEdit()
-        self.input_box.setPlaceholderText("请输入逗号分隔的FundCode (shortName)")
-        self.input_box.textChanged.connect(self.on_fundcode_input)
+    def _create_table_if_not_exists(self):
+        create_table_sql = '''
+        CREATE TABLE IF NOT EXISTS template (
+            template_id TEXT NOT NULL,
+            template_name TEXT NOT NULL UNIQUE,
+            family_id INTEGER,
+            family_name TEXT
+        )
+        '''
+        self.cursor.execute(create_table_sql)
+        self.conn.commit()
 
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabel("Entities")
-        self.tree.itemChanged.connect(self.handle_item_changed)
+    def update(self):
+        try:
+            # Step 1: 获取所有 family 信息
+            family_url = f"{self.base_url}/families"
+            family_response = requests.get(family_url)
+            family_response.raise_for_status()
+            family_list = family_response.json()
 
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("基金代码输入:"))
-        layout.addWidget(self.input_box)
-        layout.addWidget(self.tree)
+            for family in family_list:
+                family_id = family.get('id')
+                family_name = family.get('name')
 
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+                # Step 2: 获取该 family 下的所有 template
+                template_url = f"{self.base_url}/templates?family_id={family_id}"
+                template_response = requests.get(template_url)
+                template_response.raise_for_status()
+                templates = template_response.json()
 
-    def on_fundcode_input(self):
-        input_text = self.input_box.text().strip()
-        self.tree.clear()
-        self.checked_ids.clear()
+                # Step 3: 更新数据库
+                for tmpl in templates:
+                    template_id = tmpl.get('id')
+                    template_name = tmpl.get('name')
 
-        if not input_text:
-            return
+                    try:
+                        self.cursor.execute('''
+                            INSERT INTO template (template_id, template_name, family_id, family_name)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT(template_name) DO UPDATE SET
+                                template_id=excluded.template_id,
+                                family_id=excluded.family_id,
+                                family_name=excluded.family_name
+                        ''', (template_id, template_name, family_id, family_name))
+                    except sqlite3.Error as e:
+                        print(f"SQLite error for template '{template_name}': {e}")
 
-        fundcodes = [code.strip() for code in input_text.split(',') if code.strip()]
-        matched_roots = []
+            self.conn.commit()
+            print("Database update completed successfully.")
 
-        for code in fundcodes:
-            matched_nodes = self.find_matching_paths(self.full_data, code)
-            for path in matched_nodes:
-                self.merge_path_into_tree(matched_roots, path)
+        except requests.RequestException as e:
+            print(f"Request error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
 
-        # 构建树（只显示匹配部分）
-        self.build_tree(matched_roots, self.tree.invisibleRootItem())
-
-    def find_matching_paths(self, nodes, code, path=None):
-        """
-        递归查找所有匹配 `shortName == code` 的路径列表，每个路径是一条从 root 到匹配节点的列表。
-        """
-        if path is None:
-            path = []
-
-        results = []
-        for node in nodes:
-            current_path = path + [node]
-            if node.get('shortName') == code:
-                results.append(current_path)
-                # 如果是组，默认也选中它的所有子节点
-                self.add_ids_recursively(node, check_all=True)
-            elif 'entities' in node:
-                child_results = self.find_matching_paths(node['entities'], code, current_path)
-                results.extend(child_results)
-        return results
-
-    def merge_path_into_tree(self, tree, path):
-        """
-        将一个匹配路径 merge 到树结构中，避免重复节点。
-        """
-        if not path:
-            return
-
-        root = path[0]
-        for node in tree:
-            if node['id'] == root['id']:
-                # 已存在，递归合并子节点
-                self.merge_path_into_tree(node.setdefault('entities', []), path[1:])
-                return
-
-        # 不存在，复制插入（深拷贝）
-        new_node = dict(root)
-        new_node['entities'] = []
-        tree.append(new_node)
-        self.merge_path_into_tree(new_node['entities'], path[1:])
-
-    def build_tree(self, items, parent_item):
-        for item in items:
-            tree_item = QTreeWidgetItem(parent_item)
-            tree_item.setText(0, item['name'])
-            tree_item.setData(0, Qt.UserRole, item['id'])
-            tree_item.setFlags(tree_item.flags() | Qt.ItemIsUserCheckable)
-
-            is_checked = item['id'] in self.checked_ids
-            tree_item.setCheckState(0, Qt.Checked if is_checked else Qt.Unchecked)
-
-            self.build_tree(item.get('entities', []), tree_item)
-
-    def handle_item_changed(self, item, column):
-        if column != 0:
-            return
-
-        state = item.checkState(0)
-        item_id = item.data(0, Qt.UserRole)
-
-        if state == Qt.Checked:
-            self.checked_ids.add(item_id)
-        else:
-            self.checked_ids.discard(item_id)
-
-        self.update_children_checkstate(item, state)
-        print("✅ 当前勾选 ID:", self.checked_ids)
-
-    def update_children_checkstate(self, item, state):
-        for i in range(item.childCount()):
-            child = item.child(i)
-            child.setCheckState(0, state)
-            child_id = child.data(0, Qt.UserRole)
-            if state == Qt.Checked:
-                self.checked_ids.add(child_id)
-            else:
-                self.checked_ids.discard(child_id)
-            self.update_children_checkstate(child, state)
-
-    def add_ids_recursively(self, node, check_all=True):
-        """递归加入所有子节点ID（用于默认勾选）"""
-        if check_all or not node.get('isGroup', False):
-            self.checked_ids.add(node['id'])
-        for child in node.get('entities', []):
-            self.add_ids_recursively(child, check_all)
-
-
-if __name__ == "__main__":
-    import sys
-    app = QApplication(sys.argv)
-    window = TreeWithFundCodeFilter(sample_data)
-    window.resize(800, 600)
-    window.show()
-    sys.exit(app.exec_())
+    def close(self):
+        self.conn.close()
