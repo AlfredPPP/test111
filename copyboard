@@ -1,26 +1,33 @@
 import aiohttp
 import asyncio
 
-async def fetch(session, url):
+async def fetch(session, url, payload=None, headers=None):
     try:
-        async with session.get(url) as response:
+        async with session.post(url, json=payload, headers=headers) as response:
             if response.status == 201:
                 try:
-                    data = await response.json()  # You can use .text(), .read(), etc. based on response type
+                    data = await response.json()
                     print("Successfully processed 201 Created response:", data)
-                    # Continue with additional processing logic here
+                    return data
                 except Exception as e:
-                    print("Error occurred while processing 201 response body:", str(e))
+                    print("Error while parsing 201 response JSON:", str(e))
             elif response.status == 400:
-                print("Received 400 Bad Request. Please verify request parameters.")
+                print("Received 400 Bad Request. Please check your request data.")
             else:
-                print(f"Received unexpected HTTP status code: {response.status}")
+                print(f"Received unexpected HTTP status: {response.status}")
+    except asyncio.TimeoutError:
+        print("Request timed out. The server might have received the request but took too long to respond.")
     except aiohttp.ClientError as e:
-        print("An error occurred during the HTTP request:", str(e))
+        print("HTTP request failed due to a client error:", str(e))
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        await fetch(session, 'https://example.com/api/resource')
+        await fetch(
+            session,
+            url="https://example.com/api/resource",
+            payload={"some": "data"},
+            headers={"Content-Type": "application/json"}
+        )
 
-# Entry point
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
