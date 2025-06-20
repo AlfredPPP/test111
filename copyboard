@@ -1,33 +1,76 @@
-import aiohttp
-import asyncio
+from PySide2.QtWidgets import (
+    QApplication, QWidget, QLabel, QVBoxLayout, QFileDialog, QFrame
+)
+from PySide2.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QFont
+from PySide2.QtCore import Qt
+import sys
+import os
 
-async def fetch(session, url, payload=None, headers=None):
-    try:
-        async with session.post(url, json=payload, headers=headers) as response:
-            if response.status == 201:
-                try:
-                    data = await response.json()
-                    print("Successfully processed 201 Created response:", data)
-                    return data
-                except Exception as e:
-                    print("Error while parsing 201 response JSON:", str(e))
-            elif response.status == 400:
-                print("Received 400 Bad Request. Please check your request data.")
-            else:
-                print(f"Received unexpected HTTP status: {response.status}")
-    except asyncio.TimeoutError:
-        print("Request timed out. The server might have received the request but took too long to respond.")
-    except aiohttp.ClientError as e:
-        print("HTTP request failed due to a client error:", str(e))
+class DragDropWidget(QFrame):
+    def __init__(self):
+        super().__init__()
+        self.setAcceptDrops(True)
+        self.setFixedSize(400, 200)
+        self.setStyleSheet("""
+            QFrame {
+                border: 2px dashed #aaa;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+            }
+        """)
 
-async def main():
-    async with aiohttp.ClientSession() as session:
-        await fetch(
-            session,
-            url="https://example.com/api/resource",
-            payload={"some": "data"},
-            headers={"Content-Type": "application/json"}
-        )
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignCenter)
+
+        # 文件图标
+        self.icon = QLabel()
+        pixmap = QPixmap("file_icon.png")  # 确保你有一个图标文件或用QIcon.fromTheme
+        if pixmap.isNull():
+            pixmap = QPixmap(64, 64)
+            pixmap.fill(Qt.gray)  # 占位图
+        self.icon.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        layout.addWidget(self.icon)
+
+        # 提示文字
+        self.label = QLabel("Click to browse or drag and drop files here")
+        self.label.setFont(QFont("Arial", 10))
+        self.label.setStyleSheet("color: #666;")
+        layout.addWidget(self.label)
+
+        # 让整个区域可以点击打开文件
+        self.label.mousePressEvent = self.browse_files
+
+    def browse_files(self, event):
+        files, _ = QFileDialog.getOpenFileNames(self, "Select files", "", "Excel Files (*.xlsx);;All Files (*)")
+        if files:
+            self.handle_files(files)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        urls = event.mimeData().urls()
+        files = [url.toLocalFile() for url in urls if url.isLocalFile()]
+        if files:
+            self.handle_files(files)
+
+    def handle_files(self, files):
+        # 这里你可以处理文件，如传给转换器
+        print("Files dropped or selected:")
+        for file in files:
+            print(" -", file)
+
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("File Format Converter")
+        layout = QVBoxLayout(self)
+        layout.addWidget(DragDropWidget())
+        self.setFixedSize(420, 240)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec_())
