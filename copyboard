@@ -1,36 +1,53 @@
-下面是一份更符合大型公司（如 Google、Microsoft）发布说明风格的版本更新描述。它使用了正式、简洁且结构清晰的英文，并将每个更改分类为“Feature”、“Bug Fix”或“Improvement”以提高可读性：
+import sqlite3
+import os
 
-⸻
+class SQLiteHandler:
+    def __init__(self, db_path='database.db', schema_file='create_table.sql'):
+        self.db_path = db_path
+        self.schema_file = schema_file
+        self.conn = None
+        self.cursor = None
+        self._connect()
+        self._initialize_database()
 
-Release Notes – Version X.Y.Z
+    def _connect(self):
+        """Establish SQLite connection and create cursor."""
+        self.conn = sqlite3.connect(self.db_path)
+        self.cursor = self.conn.cursor()
 
-Release Date: 2025-06-25
-Summary: This release introduces key improvements in data handling and calculation logic, along with critical bug fixes to enhance system robustness and accuracy.
+    def _initialize_database(self):
+        """Initialize the database from a SQL schema file."""
+        if os.path.exists(self.schema_file):
+            with open(self.schema_file, 'r', encoding='utf-8') as f:
+                sql_script = f.read()
+            self.conn.executescript(sql_script)
+            self.conn.commit()
+        else:
+            raise FileNotFoundError(f"Schema file '{self.schema_file}' not found.")
 
-⸻
+    def query(self, query_str, params=None):
+        """Execute a SELECT query and return the results."""
+        if params is None:
+            params = ()
+        self.cursor.execute(query_str, params)
+        return self.cursor.fetchall()
 
-✨ Features
-	•	Dynamic UR Code Handling:
-Added support for single-digit UR codes. When a UR code in DMH contains only one digit, the system will now automatically prefix it with FUND to ensure proper identification.
+    def insert(self, insert_str, params):
+        """Execute an INSERT or UPDATE query."""
+        self.cursor.execute(insert_str, params)
+        self.conn.commit()
+        return self.cursor.lastrowid
 
-⸻
+    def execute(self, sql_str, params=None):
+        """Execute arbitrary SQL (non-SELECT)."""
+        if params is None:
+            params = ()
+        self.cursor.execute(sql_str, params)
+        self.conn.commit()
 
-🛠 Bug Fixes
-	•	Resolved Network Latency Freeze:
-Fixed an issue where the application could become unresponsive under poor network conditions.
-	•	RTN_OF_CAP_COST_BASE_PCT Validation:
-Corrected a bug that could cause RTN_OF_CAP_COST_BASE_PCT to exceed 1 under certain conditions.
-
-⸻
-
-🔧 Improvements
-	•	Data Source Adjustment:
-Updated data extraction to use the amount field instead of rate.
-	•	Refined Shares Calculation Logic:
-The shares value is now automatically derived from the gross amount rather than defaulting to 1.
-	•	Enhanced TAP_CGT_CONCESSION_PCT Calculation:
-Added missing logic to compute TAP_CGT_CONCESSION_PCT accurately based on available data.
-
-⸻
-
-Let me know if you’d like this reformatted for a specific tool (like GitHub Releases, Jira, Confluence, or internal wiki).
+    def close(self):
+        """Close the connection."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+            self.cursor = None
