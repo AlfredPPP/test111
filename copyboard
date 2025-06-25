@@ -1,76 +1,36 @@
-from PySide2.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QFileDialog, QFrame
-)
-from PySide2.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QFont
-from PySide2.QtCore import Qt
-import sys
-import os
+下面是一份更符合大型公司（如 Google、Microsoft）发布说明风格的版本更新描述。它使用了正式、简洁且结构清晰的英文，并将每个更改分类为“Feature”、“Bug Fix”或“Improvement”以提高可读性：
 
-class DragDropWidget(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.setAcceptDrops(True)
-        self.setFixedSize(400, 200)
-        self.setStyleSheet("""
-            QFrame {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                background-color: #f9f9f9;
-            }
-        """)
+⸻
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
+Release Notes – Version X.Y.Z
 
-        # 文件图标
-        self.icon = QLabel()
-        pixmap = QPixmap("file_icon.png")  # 确保你有一个图标文件或用QIcon.fromTheme
-        if pixmap.isNull():
-            pixmap = QPixmap(64, 64)
-            pixmap.fill(Qt.gray)  # 占位图
-        self.icon.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        layout.addWidget(self.icon)
+Release Date: 2025-06-25
+Summary: This release introduces key improvements in data handling and calculation logic, along with critical bug fixes to enhance system robustness and accuracy.
 
-        # 提示文字
-        self.label = QLabel("Click to browse or drag and drop files here")
-        self.label.setFont(QFont("Arial", 10))
-        self.label.setStyleSheet("color: #666;")
-        layout.addWidget(self.label)
+⸻
 
-        # 让整个区域可以点击打开文件
-        self.label.mousePressEvent = self.browse_files
+✨ Features
+	•	Dynamic UR Code Handling:
+Added support for single-digit UR codes. When a UR code in DMH contains only one digit, the system will now automatically prefix it with FUND to ensure proper identification.
 
-    def browse_files(self, event):
-        files, _ = QFileDialog.getOpenFileNames(self, "Select files", "", "Excel Files (*.xlsx);;All Files (*)")
-        if files:
-            self.handle_files(files)
+⸻
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
+🛠 Bug Fixes
+	•	Resolved Network Latency Freeze:
+Fixed an issue where the application could become unresponsive under poor network conditions.
+	•	RTN_OF_CAP_COST_BASE_PCT Validation:
+Corrected a bug that could cause RTN_OF_CAP_COST_BASE_PCT to exceed 1 under certain conditions.
 
-    def dropEvent(self, event: QDropEvent):
-        urls = event.mimeData().urls()
-        files = [url.toLocalFile() for url in urls if url.isLocalFile()]
-        if files:
-            self.handle_files(files)
+⸻
 
-    def handle_files(self, files):
-        # 这里你可以处理文件，如传给转换器
-        print("Files dropped or selected:")
-        for file in files:
-            print(" -", file)
+🔧 Improvements
+	•	Data Source Adjustment:
+Updated data extraction to use the amount field instead of rate.
+	•	Refined Shares Calculation Logic:
+The shares value is now automatically derived from the gross amount rather than defaulting to 1.
+	•	Enhanced TAP_CGT_CONCESSION_PCT Calculation:
+Added missing logic to compute TAP_CGT_CONCESSION_PCT accurately based on available data.
 
-class MainWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("File Format Converter")
-        layout = QVBoxLayout(self)
-        layout.addWidget(DragDropWidget())
-        self.setFixedSize(420, 240)
+⸻
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec_())
+Let me know if you’d like this reformatted for a specific tool (like GitHub Releases, Jira, Confluence, or internal wiki).
