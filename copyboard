@@ -1,53 +1,42 @@
-import sqlite3
-import os
+import re
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
-class SQLiteHandler:
-    def __init__(self, db_path='database.db', schema_file='create_table.sql'):
-        self.db_path = db_path
-        self.schema_file = schema_file
-        self.conn = None
-        self.cursor = None
-        self._connect()
-        self._initialize_database()
+def generate_monthly_ranges(input_str):
+    # 提取两个日期（yyyy-mm-dd）
+    dates = re.findall(r'\d{4}-\d{2}-\d{2}', input_str)
+    if len(dates) != 2:
+        raise ValueError("输入字符串中没有恰好两组日期")
+    
+    start_date = datetime.strptime(dates[0], '%Y-%m-%d')
+    end_date = datetime.strptime(dates[1], '%Y-%m-%d')
+    
+    # 判断是否超过半年
+    if (end_date - start_date).days <= 183:
+        return []
 
-    def _connect(self):
-        """Establish SQLite connection and create cursor."""
-        self.conn = sqlite3.connect(self.db_path)
-        self.cursor = self.conn.cursor()
+    results = []
+    current_start = start_date
 
-    def _initialize_database(self):
-        """Initialize the database from a SQL schema file."""
-        if os.path.exists(self.schema_file):
-            with open(self.schema_file, 'r', encoding='utf-8') as f:
-                sql_script = f.read()
-            self.conn.executescript(sql_script)
-            self.conn.commit()
-        else:
-            raise FileNotFoundError(f"Schema file '{self.schema_file}' not found.")
+    while True:
+        # 当前段的结束日期为一个月后的当天（不超过最终结束日期）
+        current_end = current_start + relativedelta(months=+1)
+        if current_end > end_date:
+            break
+        
+        # 构造新的字符串
+        new_str = re.sub(r'\d{4}-\d{2}-\d{2}', 
+                         lambda m, s=[current_start.strftime('%Y-%m-%d'), current_end.strftime('%Y-%m-%d')]: s.pop(0), 
+                         input_str)
+        results.append(new_str)
+        
+        # 下一段的起始日期为当前段结束日期 + 1 天
+        current_start = current_end + timedelta(days=1)
 
-    def query(self, query_str, params=None):
-        """Execute a SELECT query and return the results."""
-        if params is None:
-            params = ()
-        self.cursor.execute(query_str, params)
-        return self.cursor.fetchall()
+    return results
 
-    def insert(self, insert_str, params):
-        """Execute an INSERT or UPDATE query."""
-        self.cursor.execute(insert_str, params)
-        self.conn.commit()
-        return self.cursor.lastrowid
-
-    def execute(self, sql_str, params=None):
-        """Execute arbitrary SQL (non-SELECT)."""
-        if params is None:
-            params = ()
-        self.cursor.execute(sql_str, params)
-        self.conn.commit()
-
-    def close(self):
-        """Close the connection."""
-        if self.conn:
-            self.conn.close()
-            self.conn = None
-            self.cursor = None
+# 示例用法
+s = "Xxxxx2024-04-01xxxxxx2025-07-10"
+result = generate_monthly_ranges(s)
+for r in result:
+    print(r)
