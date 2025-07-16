@@ -1,42 +1,28 @@
-import re
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
+from PySide2.QtWidgets import QApplication, QWidget, QVBoxLayout
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
 
-def generate_monthly_ranges(input_str):
-    # 提取两个日期（yyyy-mm-dd）
-    dates = re.findall(r'\d{4}-\d{2}-\d{2}', input_str)
-    if len(dates) != 2:
-        raise ValueError("输入字符串中没有恰好两组日期")
-    
-    start_date = datetime.strptime(dates[0], '%Y-%m-%d')
-    end_date = datetime.strptime(dates[1], '%Y-%m-%d')
-    
-    # 判断是否超过半年
-    if (end_date - start_date).days <= 183:
-        return []
-
-    results = []
-    current_start = start_date
-
-    while True:
-        # 当前段的结束日期为一个月后的当天（不超过最终结束日期）
-        current_end = current_start + relativedelta(months=+1)
-        if current_end > end_date:
-            break
+class MatplotlibChart(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("统计图表")
+        layout = QVBoxLayout()
         
-        # 构造新的字符串
-        new_str = re.sub(r'\d{4}-\d{2}-\d{2}', 
-                         lambda m, s=[current_start.strftime('%Y-%m-%d'), current_end.strftime('%Y-%m-%d')]: s.pop(0), 
-                         input_str)
-        results.append(new_str)
+        # 创建 matplotlib 图表
+        fig, ax = plt.subplots()
+        x = ['1月', '2月', '3月', '4月']
+        y = [120, 132, 101, 134]
+        ax.bar(x, y, color='skyblue')
+        ax.set_title('每月用户操作量')
         
-        # 下一段的起始日期为当前段结束日期 + 1 天
-        current_start = current_end + timedelta(days=1)
+        # 嵌入 Qt 界面
+        self.canvas = FigureCanvas(fig)
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
 
-    return results
-
-# 示例用法
-s = "Xxxxx2024-04-01xxxxxx2025-07-10"
-result = generate_monthly_ranges(s)
-for r in result:
-    print(r)
+if __name__ == '__main__':
+    import sys
+    app = QApplication(sys.argv)
+    w = MatplotlibChart()
+    w.show()
+    sys.exit(app.exec_())
