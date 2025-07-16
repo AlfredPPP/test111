@@ -1,14 +1,128 @@
-class SortableSqlQueryModel(QSqlQueryModel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._base_sql = ""  # 保存原始 SQL（不包含 ORDER BY）
+import sys
+import random
+from PySide2.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QGridLayout, QSizePolicy
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import matplotlib
 
-    def setBaseQuery(self, sql):
-        self._base_sql = sql
-        self.setQuery(sql)
+matplotlib.rcParams.update({
+    'font.size': 10,
+    'axes.titlesize': 12,
+    'axes.labelsize': 10,
+    'xtick.labelsize': 9,
+    'ytick.labelsize': 9,
+    'legend.fontsize': 9,
+})
 
-    def sort(self, column, order):
-        # 获取当前列的字段名
-        column_name = self.headerData(column, Qt.Horizontal)
-        order_sql = f"{self._base_sql} ORDER BY {column_name} {'ASC' if order == Qt.AscendingOrder else 'DESC'}"
-        self.setQuery(order_sql)
+class DashboardWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Usage Analytics Dashboard")
+        self.setMinimumSize(1200, 800)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+
+        header = QLabel("Software Usage Overview")
+        header.setStyleSheet("font-size: 22px; font-weight: bold; padding: 10px;")
+        layout.addWidget(header)
+
+        grid = QGridLayout()
+        layout.addLayout(grid)
+
+        grid.addWidget(self.create_usage_chart(), 0, 0)
+        grid.addWidget(self.create_crash_chart(), 0, 1)
+        grid.addWidget(self.create_frequent_fund_display(), 1, 0)
+        grid.addWidget(self.create_live_tasks_panel(), 1, 1)
+
+        self.setCentralWidget(container)
+
+    def create_usage_chart(self):
+        fig = Figure(figsize=(5, 4))
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        features = ["Import", "Export", "Analysis", "Sync"]
+        usage_data = {f: [random.randint(20, 100) for _ in months] for f in features}
+
+        bar_width = 0.2
+        x = range(len(months))
+
+        for i, feature in enumerate(features):
+            offset = [val + i * bar_width for val in x]
+            ax.bar(offset, usage_data[feature], width=bar_width, label=feature)
+
+        ax.set_xticks([val + bar_width * 1.5 for val in x])
+        ax.set_xticklabels(months)
+        ax.set_title("Monthly Feature Usage")
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Usage Count")
+        ax.legend()
+        ax.grid(axis='y')
+
+        return canvas
+
+    def create_crash_chart(self):
+        fig = Figure(figsize=(5, 4))
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        crash_counts = [random.randint(0, 5) for _ in months]
+
+        bars = ax.bar(months, crash_counts, color='#E57373')
+        ax.set_title("Monthly Crash Report")
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Crash Count")
+
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.2, f'{int(height)}', ha='center')
+
+        return canvas
+
+    def create_frequent_fund_display(self):
+        fig = Figure(figsize=(5, 4))
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+
+        funds = ["Fund A", "Fund B", "Fund C", "Fund D"]
+        frequencies = [random.randint(10, 30) for _ in funds]
+        colors = plt.cm.tab20c.colors[:len(funds)]
+
+        wedges, texts, autotexts = ax.pie(
+            frequencies,
+            labels=funds,
+            autopct='%1.1f%%',
+            startangle=140,
+            colors=colors
+        )
+
+        ax.set_title("Most Frequent Fund in Import Tasks (Monthly)")
+        ax.axis('equal')
+        return canvas
+
+    def create_live_tasks_panel(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(6)
+
+        title = QLabel("Live Task Monitor")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
+
+        for i in range(4):
+            task_label = QLabel(f"• Task #{1000 + i} — Submitted by: User_{i+1} — Status: Processing")
+            task_label.setStyleSheet("color: #444; padding: 4px;")
+            layout.addWidget(task_label)
+
+        container.setStyleSheet("background-color: #f4f4f4; border: 1px solid #ccc; padding: 8px; border-radius: 6px;")
+        return container
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    win = DashboardWindow()
+    win.show()
+    sys.exit(app.exec_())
