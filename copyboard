@@ -1,28 +1,14 @@
-from PySide2.QtWidgets import QApplication, QWidget, QVBoxLayout
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import matplotlib.pyplot as plt
+class SortableSqlQueryModel(QSqlQueryModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._base_sql = ""  # 保存原始 SQL（不包含 ORDER BY）
 
-class MatplotlibChart(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("统计图表")
-        layout = QVBoxLayout()
-        
-        # 创建 matplotlib 图表
-        fig, ax = plt.subplots()
-        x = ['1月', '2月', '3月', '4月']
-        y = [120, 132, 101, 134]
-        ax.bar(x, y, color='skyblue')
-        ax.set_title('每月用户操作量')
-        
-        # 嵌入 Qt 界面
-        self.canvas = FigureCanvas(fig)
-        layout.addWidget(self.canvas)
-        self.setLayout(layout)
+    def setBaseQuery(self, sql):
+        self._base_sql = sql
+        self.setQuery(sql)
 
-if __name__ == '__main__':
-    import sys
-    app = QApplication(sys.argv)
-    w = MatplotlibChart()
-    w.show()
-    sys.exit(app.exec_())
+    def sort(self, column, order):
+        # 获取当前列的字段名
+        column_name = self.headerData(column, Qt.Horizontal)
+        order_sql = f"{self._base_sql} ORDER BY {column_name} {'ASC' if order == Qt.AscendingOrder else 'DESC'}"
+        self.setQuery(order_sql)
