@@ -1,62 +1,27 @@
-import xml.etree.ElementTree as ET
-import pandas as pd
+import re
 
+def find_all_altTexts_before_aaaaas(text):
+    # 找出所有 altText 的位置和值
+    alt_matches = list(re.finditer(r'"altText"\s*:\s*"([^"]+)"', text))
 
-def parse_custom_xml_to_dataframe(xml_str):
-    """Parses a custom-formatted XML string into a cleaned pandas DataFrame.
+    # 找出所有 aaaaa 的位置
+    aaaaa_matches = list(re.finditer(r'aaaaa', text))
 
-    The function extracts data from <row ... /> elements where each attribute
-    represents a column and its value. It applies custom rules for renaming
-    columns and cleaning values:
-    
-    Column name rules:
-      - Remove the prefix '_P_' and suffix '-2'.
-      - Replace underscores '_' with spaces.
-      - If the resulting name is empty or contains 'HIDE', drop the column.
+    if not alt_matches or not aaaaa_matches:
+        return []
 
-    Cell value rules:
-      - Remove everything after (and including) the first '@' character.
+    results = []
 
-    Args:
-        xml_str (str): The XML content as a string.
+    for aaaaa_match in aaaaa_matches:
+        aaaaa_pos = aaaaa_match.start()
 
-    Returns:
-        pd.DataFrame: A cleaned pandas DataFrame containing parsed values.
-    
-    Raises:
-        xml.etree.ElementTree.ParseError: If the input XML string is invalid.
-    """
-    # Parse XML string
-    root = ET.fromstring(xml_str)
-
-    # Extract all <row> attributes as dictionaries
-    raw_data = [row.attrib for row in root.findall(".//row")]
-
-    # Create raw DataFrame
-    df_raw = pd.DataFrame(raw_data)
-
-    # Prepare for column renaming and filtering
-    new_columns = {}
-    columns_to_drop = []
-
-    for col in df_raw.columns:
-        if "HIDE" in col:
-            columns_to_drop.append(col)
-            continue
-
-        # Clean column name
-        cleaned_col = col.replace("_P_", "").replace("-2", "").replace("_", " ").strip()
-
-        # Drop columns that become empty or only spaces
-        if cleaned_col.strip() == "":
-            columns_to_drop.append(col)
+        # 找出所有在当前 aaaaa 之前的 altText
+        alt_before = [m for m in alt_matches if m.start() < aaaaa_pos]
+        if alt_before:
+            nearest_alt = alt_before[-1]  # 最后一个是最近的
+            alt_value = nearest_alt.group(1)
+            results.append(alt_value)
         else:
-            new_columns[col] = cleaned_col
+            results.append(None)  # 如果找不到就用 None 填充
 
-    # Drop unwanted columns and rename the rest
-    df = df_raw.drop(columns=columns_to_drop).rename(columns=new_columns)
-
-    # Clean cell values (remove anything after '@')
-    df = df.applymap(lambda x: x.split("@")[0].strip() if isinstance(x, str) else x)
-
-    return df
+    return results
