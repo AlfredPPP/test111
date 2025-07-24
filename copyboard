@@ -1,27 +1,43 @@
+import pandas as pd
 import re
 
-def find_all_altTexts_before_aaaaas(text):
-    # 找出所有 altText 的位置和值
-    alt_matches = list(re.finditer(r'"altText"\s*:\s*"([^"]+)"', text))
+# 示例：一列混有数字、负数、逗号、字母
+df = pd.DataFrame({
+    '数据': ['123', '-456.78', '1,234', 'abc', '789xyz', '-1,000.55', '', '0']
+})
 
-    # 找出所有 aaaaa 的位置
-    aaaaa_matches = list(re.finditer(r'aaaaa', text))
+import xlsxwriter
 
-    if not alt_matches or not aaaaa_matches:
-        return []
+# 写入 Excel
+with pd.ExcelWriter('output.xlsx', engine='xlsxwriter') as writer:
+    df.to_excel(writer, sheet_name='Sheet1', index=False, header=True, startrow=0)
 
-    results = []
+    workbook  = writer.book
+    worksheet = writer.sheets['Sheet1']
 
-    for aaaaa_match in aaaaa_matches:
-        aaaaa_pos = aaaaa_match.start()
+    # 创建格式
+    number_format = workbook.add_format({'num_format': '0.00'})  # 数字格式
+    general_format = workbook.add_format({'num_format': 'General'})  # 默认格式
 
-        # 找出所有在当前 aaaaa 之前的 altText
-        alt_before = [m for m in alt_matches if m.start() < aaaaa_pos]
-        if alt_before:
-            nearest_alt = alt_before[-1]  # 最后一个是最近的
-            alt_value = nearest_alt.group(1)
-            results.append(alt_value)
-        else:
-            results.append(None)  # 如果找不到就用 None 填充
+    # 数字识别函数（支持负号、小数、千位逗号）
+    def is_number_like(val):
+        if isinstance(val, (int, float)):
+            return True
+        if isinstance(val, str):
+            val_clean = val.replace(',', '')
+            return bool(re.fullmatch(r'-?\d+(\.\d+)?', val_clean))
+        return False
 
-    return results
+    # 写入数据（逐单元格处理）
+    for row in range(len(df)):
+        for col in range(len(df.columns)):
+            val = df.iat[row, col]
+            cell_row = row + 1  # 因为 header 占了第 0 行
+            cell_col = col
+
+            if is_number_like(val):
+                # 如果是数字，先去除逗号再转为 float
+                val_clean = str(val).replace(',', '')
+                worksheet.write_number(cell_row, cell_col, float(val_clean), number_format)
+            else:
+                worksheet.write(cell_row, cell_col, val, general_format)
