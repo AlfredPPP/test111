@@ -1,43 +1,83 @@
-import pandas as pd
-import re
+Looking at your requirements document, it's a good start! You've outlined the main interfaces and functionality well. However, to make this document comprehensive enough for a production-grade enterprise project, here are the key areas that need more detail:
 
-# 示例：一列混有数字、负数、逗号、字母
-df = pd.DataFrame({
-    '数据': ['123', '-456.78', '1,234', 'abc', '789xyz', '-1,000.55', '', '0']
-})
+## 1. **Project Overview & Context**
+- What is the business purpose of this application?
+- Who are the target users and how many?
+- What manual processes is this replacing?
+- What are the critical business requirements and success metrics?
 
-import xlsxwriter
+## 2. **Technical Architecture**
+- Is this a desktop app (using PySide6) or web-based?
+- Will it be single-user or multi-user concurrent access?
+- Deployment strategy (standalone executable, client-server, cloud-based)?
+- Performance requirements (data volume, response times, concurrent users)?
 
-# 写入 Excel
-with pd.ExcelWriter('output.xlsx', engine='xlsxwriter') as writer:
-    df.to_excel(writer, sheet_name='Sheet1', index=False, header=True, startrow=0)
+## 3. **Data Specifications**
+- What specific data is being downloaded from ASX, iShares, Betashares, Vanguard?
+- Data formats (CSV, JSON, XML, HTML scraping)?
+- Data volume estimates (daily/monthly)
+- Update frequency requirements
+- Data retention policies
 
-    workbook  = writer.book
-    worksheet = writer.sheets['Sheet1']
+## 4. **Database Schema Details**
+For each table (asx_headline, nz_asx, mr_update, vanguard):
+- Column definitions with data types
+- Primary/foreign keys
+- Indexes needed
+- Sample data rows
+- Relationships between tables
 
-    # 创建格式
-    number_format = workbook.add_format({'num_format': '0.00'})  # 数字格式
-    general_format = workbook.add_format({'num_format': 'General'})  # 默认格式
+## 5. **File Parser Templates**
+- What file formats need parsing?
+- Example templates with regex patterns
+- Business rules for calculated columns
+- Validation rules
+- Error handling requirements
 
-    # 数字识别函数（支持负号、小数、千位逗号）
-    def is_number_like(val):
-        if isinstance(val, (int, float)):
-            return True
-        if isinstance(val, str):
-            val_clean = val.replace(',', '')
-            return bool(re.fullmatch(r'-?\d+(\.\d+)?', val_clean))
-        return False
+## 6. **MR Update Interface Details**
+- What is "MR" and "DMH system"?
+- Fixed column names for the editable table
+- API/integration details for DMH system
+- Backup file format and naming convention
+- Business data display requirements
 
-    # 写入数据（逐单元格处理）
-    for row in range(len(df)):
-        for col in range(len(df.columns)):
-            val = df.iat[row, col]
-            cell_row = row + 1  # 因为 header 占了第 0 行
-            cell_col = col
+## 7. **Security & Access Control**
+- Authentication requirements
+- User roles and permissions
+- Data access restrictions
+- Audit trail requirements
+- Sensitive data handling
 
-            if is_number_like(val):
-                # 如果是数字，先去除逗号再转为 float
-                val_clean = str(val).replace(',', '')
-                worksheet.write_number(cell_row, cell_col, float(val_clean), number_format)
-            else:
-                worksheet.write(cell_row, cell_col, val, general_format)
+## 8. **Error Handling & Recovery**
+- Network failure handling (for downloads)
+- Partial data update strategies
+- Transaction rollback requirements
+- Data validation rules
+- User notification preferences
+
+## 9. **Integration Requirements**
+- API endpoints or scraping strategies for each data source
+- Authentication methods for external sites
+- Rate limiting considerations
+- DMH system integration protocol
+
+## 10. **Non-Functional Requirements**
+- Response time expectations
+- Availability requirements
+- Backup and disaster recovery
+- Monitoring and alerting needs
+- Compliance requirements (if any)
+
+## 11. **Testing Strategy**
+- Test data requirements
+- UAT scenarios
+- Performance benchmarks
+- Regression test coverage
+
+## 12. **Maintenance & Operations**
+- Update/patch strategy
+- Configuration management
+- Documentation requirements
+- Support procedures
+
+Would you like me to help you create a template for any of these sections? Also, understanding your company's specific use case would help - for example, is this for portfolio management, market analysis, or compliance reporting?
