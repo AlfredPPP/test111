@@ -81,3 +81,53 @@ For each table (asx_headline, nz_asx, mr_update, vanguard):
 - Support procedures
 
 Would you like me to help you create a template for any of these sections? Also, understanding your company's specific use case would help - for example, is this for portfolio management, market analysis, or compliance reporting?
+
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+import asyncio
+
+async def filter(self, **kwargs):
+    as_of_date = kwargs.get("as_of_date")
+    
+    if not as_of_date:
+        raise ValueError("Missing as_of_date parameter")
+    
+    date_ranges = []
+    
+    # 解析日期
+    if "&" in as_of_date:
+        start_str, end_str = as_of_date.split("&")
+        start = datetime.strptime(start_str, "%Y-%m-%d").date()
+        end = datetime.strptime(end_str, "%Y-%m-%d").date()
+        
+        # 拆分成不超过 1 个月的区间
+        current_start = start
+        while current_start < end:
+            current_end = min(current_start + relativedelta(months=1) - timedelta(days=1), end)
+            date_ranges.append((current_start, current_end))
+            current_start = current_end + timedelta(days=1)
+    else:
+        # 单个日期直接处理
+        single_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
+        date_ranges.append((single_date, single_date))
+    
+    async def do_request(s, e):
+        new_kwargs = kwargs.copy()
+        if s == e:
+            new_kwargs["as_of_date"] = s.strftime("%Y-%m-%d")
+        else:
+            new_kwargs["as_of_date"] = f"{s.strftime('%Y-%m-%d')}&{e.strftime('%Y-%m-%d')}"
+        async with self.semaphore:
+            rts_accounting = RTSAccounting()
+            data = rts_accounting.build_filter_params(**new_kwargs)
+            async with self.session.post(POST_URL, data=data) as resp:
+                content = await resp.json()
+                rows = content["xdata"]["rows"]
+                print(f"{s} - {e}: {len(rows)} rows")
+                return rows
+    
+    # 并发执行
+    tasks = [asyncio.create_task(do_request(s, e)) for s, e in date_ranges]
+    results = await asyncio.gather(*tasks)
+    
+    return results
