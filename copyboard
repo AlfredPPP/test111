@@ -1,157 +1,21 @@
-Looking at your requirements document, it's a good start! You've outlined the main interfaces and functionality well. However, to make this document comprehensive enough for a production-grade enterprise project, here are the key areas that need more detail:
+import os
+import pandas as pd
 
-## 1. **Project Overview & Context**
-- What is the business purpose of this application?
-- Who are the target users and how many?
-- What manual processes is this replacing?
-- What are the critical business requirements and success metrics?
+def find_csv_by_keyword(folder_path, keyword):
+    # 遍历文件夹中的所有文件
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith(".csv"):
+            file_path = os.path.join(folder_path, file_name)
+            try:
+                # 只读取第一列，加快速度
+                df = pd.read_csv(file_path, usecols=[0], dtype=str)  
+                if keyword in df.iloc[:, 0].values:
+                    print(file_name)
+            except Exception as e:
+                print(f"读取文件 {file_name} 时出错: {e}")
 
-## 2. **Technical Architecture**
-- Is this a desktop app (using PySide6) or web-based?
-- Will it be single-user or multi-user concurrent access?
-- Deployment strategy (standalone executable, client-server, cloud-based)?
-- Performance requirements (data volume, response times, concurrent users)?
-
-## 3. **Data Specifications**
-- What specific data is being downloaded from ASX, iShares, Betashares, Vanguard?
-- Data formats (CSV, JSON, XML, HTML scraping)?
-- Data volume estimates (daily/monthly)
-- Update frequency requirements
-- Data retention policies
-
-## 4. **Database Schema Details**
-For each table (asx_headline, nz_asx, mr_update, vanguard):
-- Column definitions with data types
-- Primary/foreign keys
-- Indexes needed
-- Sample data rows
-- Relationships between tables
-
-## 5. **File Parser Templates**
-- What file formats need parsing?
-- Example templates with regex patterns
-- Business rules for calculated columns
-- Validation rules
-- Error handling requirements
-
-## 6. **MR Update Interface Details**
-- What is "MR" and "DMH system"?
-- Fixed column names for the editable table
-- API/integration details for DMH system
-- Backup file format and naming convention
-- Business data display requirements
-
-## 7. **Security & Access Control**
-- Authentication requirements
-- User roles and permissions
-- Data access restrictions
-- Audit trail requirements
-- Sensitive data handling
-
-## 8. **Error Handling & Recovery**
-- Network failure handling (for downloads)
-- Partial data update strategies
-- Transaction rollback requirements
-- Data validation rules
-- User notification preferences
-
-## 9. **Integration Requirements**
-- API endpoints or scraping strategies for each data source
-- Authentication methods for external sites
-- Rate limiting considerations
-- DMH system integration protocol
-
-## 10. **Non-Functional Requirements**
-- Response time expectations
-- Availability requirements
-- Backup and disaster recovery
-- Monitoring and alerting needs
-- Compliance requirements (if any)
-
-## 11. **Testing Strategy**
-- Test data requirements
-- UAT scenarios
-- Performance benchmarks
-- Regression test coverage
-
-## 12. **Maintenance & Operations**
-- Update/patch strategy
-- Configuration management
-- Documentation requirements
-- Support procedures
-
-Would you like me to help you create a template for any of these sections? Also, understanding your company's specific use case would help - for example, is this for portfolio management, market analysis, or compliance reporting?
-
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import asyncio
-
-class FilterTest:
-    def __init__(self, concurrency_limit=5):
-        self.semaphore = asyncio.Semaphore(concurrency_limit)
-        self.session = None  # 你原本的 session 初始化方式
-
-    @staticmethod
-    def split_date_ranges(kwargs: dict, month: int = 1):
-        """静态方法：拆分 as_of_date 区间
-        参数：
-            kwargs: 原始 filter 参数字典
-            month: 拆分的最小间隔（月数）
-        返回：
-            list[dict] 如果需要拆分
-            dict 如果不需要拆分
-        """
-        as_of_date = kwargs.get("as_of_date")
-        if not as_of_date:
-            return kwargs  # 没有 as_of_date，直接返回原始参数
-
-        # 检查是否是区间
-        if "&" not in as_of_date:
-            return kwargs  # 单个日期不拆分
-
-        start_str, end_str = as_of_date.split("&")
-        start = datetime.strptime(start_str, "%Y-%m-%d").date()
-        end = datetime.strptime(end_str, "%Y-%m-%d").date()
-
-        # 判断是否需要拆分
-        if start + relativedelta(months=month) > end:
-            return kwargs  # 区间小于等于指定月数，不拆
-
-        # 拆分
-        results = []
-        current_start = start
-        while current_start <= end:
-            current_end = min(
-                current_start + relativedelta(months=month) - timedelta(days=1),
-                end
-            )
-            new_kwargs = kwargs.copy()
-            if current_start == current_end:
-                new_kwargs["as_of_date"] = current_start.strftime("%Y-%m-%d")
-            else:
-                new_kwargs["as_of_date"] = f"{current_start.strftime('%Y-%m-%d')}&{current_end.strftime('%Y-%m-%d')}"
-            results.append(new_kwargs)
-            current_start = current_end + timedelta(days=1)
-
-        return results
-
-    async def filter(self, **kwargs):
-        month = kwargs.pop("month", 1)  # 用户可以传 month 参数
-        split_result = self.split_date_ranges(kwargs, month=month)
-
-        async def do_request(params):
-            async with self.semaphore:
-                rts_accounting = RTSAccounting()
-                data = rts_accounting.build_filter_params(**params)
-                async with self.session.post(POST_URL, data=data) as resp:
-                    content = await resp.json()
-                    rows = content["xdata"]["rows"]
-                    print(f"{params['as_of_date']}: {len(rows)} rows")
-                    return rows
-
-        if isinstance(split_result, list):
-            tasks = [asyncio.create_task(do_request(p)) for p in split_result]
-            results = await asyncio.gather(*tasks)
-            return results
-        else:
-            return await do_request(split_result)
+# 使用示例
+if __name__ == "__main__":
+    folder_path = "your_folder_path_here"   # 替换为你的文件夹路径
+    keyword = "your_keyword_here"           # 替换为要搜索的关键字
+    find_csv_by_keyword(folder_path, keyword)
