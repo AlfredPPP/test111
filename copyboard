@@ -27,3 +27,9 @@ Data Submission and Synchronization Logic
 ⸻
 
 Would you like me to make this sound more technical (like a system design doc) or more user-friendly (like an end-user manual)?
+
+
+=IF(AND($V2="D",ISNUMBER(--TEXT($W2,"00000000000000")), 
+        VALUE(MID(TEXT($W2,"00000000000000"),9,2))>=8, 
+        VALUE(MID(TEXT($W2,"00000000000000"),9,2))<18), 
+   "D","F")
