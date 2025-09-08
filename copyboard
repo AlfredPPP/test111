@@ -1,140 +1,29 @@
-👌很好，你的项目已经有了比较清晰的 DDD（领域驱动设计）+ 分层结构，你现在需要把「爬虫」这一块理清楚。
-我结合你传的 requirements.docx（里面提到的数据源、更新逻辑、解析逻辑）+ 现有项目结构，帮你梳理一个架构思路：
+Got it 👍 Let me help you phrase this in clear English so it can go into your documentation.
+Here’s a structured explanation of the logic for how data flows from the parse interface to the update interface:
 
 ⸻
 
-🏗 爬虫架构建议
-
-你的项目已经区分了 scrapers（抓取数据的最低层） 和 business/services（业务逻辑服务层）。
-可以这样分工：
-
-1. scrapers/ （最低层，数据抓取）
-	•	每个文件对应一个数据源：
-	•	asx_scraper.py
-	•	vanguard_scraper.py
-	•	betashares_scraper.py
-	•	ishares_scraper.py
-
-特点：
-	•	只负责「抓取 HTML/JSON/PDF 文件」→ 返回原始数据（dict / JSON / bytes）。
-	•	使用 aiohttp 实现异步请求。
-	•	不直接操作数据库。
-
-示例 (asx_scraper.py)：
-
-import aiohttp
-import asyncio
-
-class AsxScraper:
-    BASE_URL = "https://www.asx.com.au/asx/announcements/"
-
-    async def fetch_announcements(self, code: str, start_date, end_date):
-        params = {
-            "asx_code": code,
-            "from_date": start_date.strftime("%Y-%m-%d"),
-            "to_date": end_date.strftime("%Y-%m-%d"),
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.BASE_URL, params=params) as resp:
-                return await resp.json()  # 可能是JSON / HTML
-
+Data Submission and Synchronization Logic
+	1.	Data Preparation in Parse Interface
+	•	In the parse interface, users parse and validate business data.
+	•	Once the data passes validation, the user can click the Submit button.
+	•	During submission, the user is prompted to provide key identifiers (such as Client ID, Asset ID, and other header information) to accompany the business data.
+	•	The submission package consists of:
+	•	The business data payload (not fully visible in the UI)
+	•	The header identifiers (e.g., Client ID, Asset ID)
+	2.	Transfer to Update Interface
+	•	After submission, the data is sent from the parse interface to the update interface.
+	•	The update interface maintains a table widget where each row represents one record. Each row visibly displays only a subset of fields (such as Client ID and Asset ID), while the corresponding detailed business data is stored in the background.
+	3.	Data Integration in Update Interface
+	•	When new data arrives from the parse interface, the update interface checks if the submitted Client ID + Asset ID combination already exists in the table:
+	•	If a matching record exists:
+	•	The system updates the corresponding row in the table with the new business data, replacing the previous background data.
+	•	If no matching record exists:
+	•	A new row is created in the table with the provided identifiers (e.g., Client ID, Asset ID), and the associated business data is stored in the background.
+	4.	Resulting State
+	•	The update interface table always reflects the current set of business records.
+	•	Users see key identifiers in the table, while the full business data remains linked behind each row, updated or newly inserted depending on the submission.
 
 ⸻
 
-2. business/services/spider_service.py （业务逻辑层）
-	•	调用 scrapers → 拿到原始数据。
-	•	调用 parsers → 把原始数据解析成结构化对象（dict）。
-	•	调用 database.repositories → 把结果存进数据库。
-	•	调用 system_log_repository → 记录日志。
-
-它相当于「爬虫调度器 + 数据落库服务」。
-
-示例 (spider_service.py)：
-
-from datetime import date
-from src.dmh_mr_tool.scrapers.asx_scraper import AsxScraper
-from src.dmh_mr_tool.business.services.parser_service import ParserService
-from src.dmh_mr_tool.database.connection import DatabaseManager
-from src.dmh_mr_tool.database.repositories.asx_repository import AsxInfoRepository
-
-class SpiderService:
-    def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
-        self.scraper = AsxScraper()
-        self.parser = ParserService()
-
-    async def crawl_asx(self, code: str, start: date, end: date, user="system"):
-        raw_data = await self.scraper.fetch_announcements(code, start, end)
-        parsed = self.parser.parse_asx(raw_data)
-
-        with self.db_manager.session() as session:
-            repo = AsxInfoRepository(session)
-            for item in parsed:
-                if not repo.find_duplicate(item["asx_code"], item["title"], item["pub_date"]):
-                    repo.create(
-                        asx_code=item["asx_code"],
-                        title=item["title"],
-                        pub_date=item["pub_date"],
-                        pdf_url=item["pdf_url"],
-                        update_user=user
-                    )
-
-
-⸻
-
-3. parsers/ （数据解析层）
-	•	专注于「把 HTML / JSON / PDF」转成统一的结构化格式（dict 或模型）。
-	•	你已经有 parser_service.py，它可以做统一调度。
-	•	例如 pdf_parser.py、excel_parser.py 就是专门的工具类。
-
-⸻
-
-4. main.py （入口调度）
-	•	用户从 UI 界面点「开始爬虫」 → UI 调用 SpiderService → 开始爬取数据并入库。
-	•	或者你可以在命令行里调用，比如：
-
-import asyncio
-from src.dmh_mr_tool.database.connection import DatabaseManager
-from src.dmh_mr_tool.config.settings import DatabaseConfig
-from src.dmh_mr_tool.business.services.spider_service import SpiderService
-from datetime import date
-
-async def main():
-    db = DatabaseManager(DatabaseConfig(path="dmh.db", echo=True))
-    db.initialize()
-    spider = SpiderService(db)
-
-    await spider.crawl_asx("BHP", date(2025,1,1), date(2025,8,20))
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-
-⸻
-
-📌 调用关系总结
-	1.	UI 层（ui/spider_view.py）
-	•	用户操作 → 调用 SpiderService。
-	2.	业务层（business/services/spider_service.py）
-	•	调度 scrapers → 拿数据。
-	•	调用 parsers → 解析。
-	•	调用 repositories → 入库。
-	3.	数据获取层（scrapers/*.py）
-	•	用 aiohttp 请求网站 → 返回原始数据。
-	4.	解析层（parsers/*.py）
-	•	解析 HTML / JSON / PDF → 标准化 dict。
-	5.	数据库层（database/*.py）
-	•	repositories 写入数据库。
-	•	connection 管理事务。
-
-⸻
-
-✅ 这样分层的好处：
-	•	scrapers 只管「抓数据」，方便测试和替换。
-	•	parsers 只管「解析」，可以单独维护规则。
-	•	spider_service 管理「抓取 → 解析 → 入库」的全流程。
-	•	repositories 保证数据库操作统一。
-
-⸻
-
-要不要我帮你画一个 调用流程图，让你更直观地看到「UI → spider_service → scrapers + parsers → database」的全链路？
+Would you like me to make this sound more technical (like a system design doc) or more user-friendly (like an end-user manual)?
