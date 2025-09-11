@@ -1,35 +1,25 @@
-Got it 👍 Let me help you phrase this in clear English so it can go into your documentation.
-Here’s a structured explanation of the logic for how data flows from the parse interface to the update interface:
+import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import MyTable, Base  # 你的 ORM 定义
 
-⸻
+# 1. 读取 Excel
+df = pd.read_excel("data.xlsx")
 
-Data Submission and Synchronization Logic
-	1.	Data Preparation in Parse Interface
-	•	In the parse interface, users parse and validate business data.
-	•	Once the data passes validation, the user can click the Submit button.
-	•	During submission, the user is prompted to provide key identifiers (such as Client ID, Asset ID, and other header information) to accompany the business data.
-	•	The submission package consists of:
-	•	The business data payload (not fully visible in the UI)
-	•	The header identifiers (e.g., Client ID, Asset ID)
-	2.	Transfer to Update Interface
-	•	After submission, the data is sent from the parse interface to the update interface.
-	•	The update interface maintains a table widget where each row represents one record. Each row visibly displays only a subset of fields (such as Client ID and Asset ID), while the corresponding detailed business data is stored in the background.
-	3.	Data Integration in Update Interface
-	•	When new data arrives from the parse interface, the update interface checks if the submitted Client ID + Asset ID combination already exists in the table:
-	•	If a matching record exists:
-	•	The system updates the corresponding row in the table with the new business data, replacing the previous background data.
-	•	If no matching record exists:
-	•	A new row is created in the table with the provided identifiers (e.g., Client ID, Asset ID), and the associated business data is stored in the background.
-	4.	Resulting State
-	•	The update interface table always reflects the current set of business records.
-	•	Users see key identifiers in the table, while the full business data remains linked behind each row, updated or newly inserted depending on the submission.
+# 2. 创建数据库连接
+engine = create_engine("sqlite:///my_database.db")
+Session = sessionmaker(bind=engine)
+session = Session()
 
-⸻
+# 3. 遍历 DataFrame，构造 ORM 对象
+records = []
+for _, row in df.iterrows():
+    # 只传入 ORM 模型里定义的字段
+    data = {col: row[col] for col in df.columns if hasattr(MyTable, col)}
+    obj = MyTable(**data)
+    records.append(obj)
 
-Would you like me to make this sound more technical (like a system design doc) or more user-friendly (like an end-user manual)?
-
-
-=IF(AND($V2="D",ISNUMBER(--TEXT($W2,"00000000000000")), 
-        VALUE(MID(TEXT($W2,"00000000000000"),9,2))>=8, 
-        VALUE(MID(TEXT($W2,"00000000000000"),9,2))<18), 
-   "D","F")
+# 4. 批量插入
+session.add_all(records)
+session.commit()
+session.close()
